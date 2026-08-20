@@ -1,26 +1,142 @@
 @import "tailwindcss";
 
+
+/* VARIABLES BASE */
+
 :root {
+
   --background: #ffffff;
+
   --foreground: #171717;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+
+/* MODO OSCURO */
 
 @media (prefers-color-scheme: dark) {
+
   :root {
+
     --background: #0a0a0a;
+
     --foreground: #ededed;
   }
 }
 
+
+/* HTML GLOBAL */
+
+html {
+
+  width: 100%;
+
+  min-height: 100%;
+
+  overflow-x: hidden;
+
+  scroll-behavior: smooth;
+
+  -webkit-text-size-adjust: 100%;
+
+  touch-action: manipulation;
+}
+
+
+/* BODY GLOBAL */
+
 body {
+
+  width: 100%;
+
+  min-height: 100vh;
+
+  overflow-x: hidden;
+
   background: var(--background);
+
   color: var(--foreground);
+
   font-family: Arial, Helvetica, sans-serif;
+
+  position: relative;
+
+  -webkit-overflow-scrolling: touch;
+
+  touch-action: manipulation;
+}
+
+
+/* ROOT NEXTJS */
+
+#__next {
+
+  width: 100%;
+
+  min-height: 100vh;
+}
+
+
+/* TODOS LOS ELEMENTOS */
+
+* {
+
+  box-sizing: border-box;
+
+  -webkit-tap-highlight-color: transparent;
+}
+
+
+/* IMÁGENES */
+
+img {
+
+  max-width: 100%;
+
+  display: block;
+}
+
+
+/* VIDEOS */
+
+video {
+
+  max-width: 100%;
+
+  height: auto;
+
+  pointer-events: none;
+}
+
+
+/* BOTONES */
+
+button {
+
+  cursor: pointer;
+
+  touch-action: manipulation;
+}
+
+
+/* LINKS */
+
+a {
+
+  touch-action: manipulation;
+
+  text-decoration: none;
+}
+
+
+/* TAILWIND ROOT */
+
+@theme inline {
+
+  --color-background: var(--background);
+
+  --color-foreground: var(--foreground);
+
+  --font-sans: var(--font-geist-sans);
+
+  --font-mono: var(--font-geist-mono);
 }
