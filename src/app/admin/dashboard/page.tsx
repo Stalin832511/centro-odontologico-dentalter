@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Sidebar from "@/components/admin/Sidebar";
 import Topbar from "@/components/admin/Topbar";
@@ -9,6 +9,7 @@ import GraficoDashboard from "@/components/admin/GraficoDashboard";
 import CalendarioPremium from "@/components/admin/CalendarioPremium";
 import AgendaDia from "@/components/admin/AgendaDia";
 import TablaCitas from "@/components/admin/TablaCitas";
+import { obtenerMiPerfilDoctor, PerfilDoctorActual } from "@/services/medico";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
@@ -21,6 +22,13 @@ const fadeUp = {
 
 export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [perfilDoctor, setPerfilDoctor] = useState<PerfilDoctorActual | null>(null);
+
+  useEffect(() => {
+    obtenerMiPerfilDoctor().then(setPerfilDoctor);
+  }, []);
+
+  const primerNombre = perfilDoctor?.nombres?.split(" ")[0] ?? "";
 
   return (
     <main className="min-h-screen bg-[#f6f7fb]">
@@ -57,13 +65,41 @@ export default function DashboardPage() {
                       Sistema administrativo
                     </p>
                   </div>
+
+                  {/* Saludo personalizado si la cuenta está vinculada
+                      a una fila de doctor (ej. la Dra. Fajardo como
+                      dueña); si no, se muestra el título genérico. */}
                   <h1 className="text-white font-bold text-2xl sm:text-3xl md:text-[42px] xl:text-5xl leading-[1.1] mb-3 tracking-tight">
-                    Dashboard clínico
+                    {perfilDoctor ? `Buen día, Dra. ${primerNombre}` : "Dashboard clínico"}
                   </h1>
                   <p className="text-slate-400 max-w-xl text-sm sm:text-[15px] leading-relaxed">
                     Gestiona pacientes, citas médicas, doctores, especialidades
                     y reportes desde una única plataforma.
                   </p>
+
+                  {perfilDoctor && (
+                    <div className="flex items-center gap-3 mt-5">
+                      {perfilDoctor.foto_url ? (
+                        <img
+                          src={perfilDoctor.foto_url}
+                          alt={`${perfilDoctor.nombres} ${perfilDoctor.apellidos}`}
+                          className="w-11 h-11 rounded-full object-cover border-2 border-white/20"
+                        />
+                      ) : (
+                        <div className="w-11 h-11 rounded-full bg-white/10 border-2 border-white/20 flex items-center justify-center text-white font-bold">
+                          {perfilDoctor.nombres.charAt(0)}
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-white font-semibold text-sm">
+                          {perfilDoctor.nombres} {perfilDoctor.apellidos}
+                        </p>
+                        <p className="text-slate-400 text-xs">
+                          {perfilDoctor.especialidad ?? "Administradora General"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-6 md:gap-8 shrink-0">

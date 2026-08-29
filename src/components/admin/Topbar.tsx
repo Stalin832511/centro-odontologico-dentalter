@@ -1,12 +1,16 @@
 "use client";
 
 import { Search, Bell, Settings, Menu } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import ProfileMenu from "@/components/ProfileMenu";
 
 interface TopbarProps {
   onMenuClick?: () => void;
 }
 
 export default function Topbar({ onMenuClick }: TopbarProps) {
+  const { user } = useAuth();
+
   const fecha = new Date().toLocaleDateString("es-EC", {
     weekday: "long",
     year: "numeric",
@@ -15,7 +19,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   });
 
   return (
-    <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200 px-4 md:px-8 py-4">
+    <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200 px-4 md:px-8 py-4 print:hidden">
       <div className="flex items-center justify-between gap-4">
         {/* IZQUIERDA */}
         <div className="flex items-center gap-3 md:gap-4 min-w-0">
@@ -57,18 +61,10 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             <Settings size={20} />
           </button>
 
-          {/* PERFIL */}
-          <div className="flex items-center gap-3 bg-white rounded-2xl px-2 sm:px-3 py-2 shadow-sm">
-            <img
-              src="/imagenes/Quienes-somos.jpeg"
-              alt="Admin"
-              className="w-9 h-9 sm:w-11 sm:h-11 rounded-full object-cover"
-            />
-            <div className="hidden md:block">
-              <h3 className="text-sm font-bold text-slate-800">Dra. Tatiana</h3>
-              <p className="text-xs text-slate-500">Administrador</p>
-            </div>
-          </div>
+          {/* PERFIL — ahora es un menú desplegable con foto real
+              (si existe) y, si la cuenta tiene doble rol, el
+              botón para cambiar de panel */}
+          <ProfileMenu currentPanel="administrador" />
         </div>
       </div>
     </header>

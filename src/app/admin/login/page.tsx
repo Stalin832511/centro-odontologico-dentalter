@@ -35,6 +35,8 @@ const ROLES: {
     id: "medico",
     label: "Médico",
     icon: Stethoscope,
+    // ⚠️ Revisa esta ruta: si tu carpeta real es "medicos/dashboard"
+    // (plural), cámbiala a "/medicos/dashboard" para evitar un 404.
     redirect: "/medico/dashboard",
     placeholder: "doctor@clinica.com",
   },
@@ -68,7 +70,7 @@ function LoginContent() {
     setLoading(true);
 
     try {
-      // 1) Autenticación REAL contra Supabase — ya no es simulado
+      // 1) Autenticación REAL contra Supabase
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -78,12 +80,23 @@ function LoginContent() {
         throw new Error("Correo o contraseña incorrectos.");
       }
 
-      // 2) Verificamos que el rol guardado en el usuario coincida con
-      //    el que seleccionó en el formulario (evita que un paciente
-      //    entre por el selector de "Administrador", por ejemplo)
-      const rolReal = data.user.user_metadata?.rol as Role | undefined;
+      // 2) Verificamos que el rol guardado en el usuario incluya el
+      //    que seleccionó en el formulario (evita que un paciente
+      //    entre por el selector de "Administrador", por ejemplo).
+      //
+      //    IMPORTANTE: el rol puede venir como texto simple
+      //    ("rol": "medico") para cuentas normales, o como arreglo
+      //    ("rol": ["administrador", "medico"]) para cuentas con
+      //    doble rol como la de la Dra. Fajardo. Este bloque
+      //    normaliza ambos casos antes de comparar.
+      const rolGuardado = data.user.user_metadata?.rol as Role | Role[] | undefined;
+      const rolesDeLaCuenta = Array.isArray(rolGuardado)
+        ? rolGuardado
+        : rolGuardado
+        ? [rolGuardado]
+        : [];
 
-      if (rolReal !== role) {
+      if (!rolesDeLaCuenta.includes(role)) {
         await supabase.auth.signOut();
         throw new Error(
           `Esta cuenta no tiene permisos de ${activeRole.label.toLowerCase()}. Verifica el tipo de cuenta seleccionado.`

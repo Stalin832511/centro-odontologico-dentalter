@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Users,
@@ -8,14 +9,15 @@ import {
   FileText,
   Clock,
   Phone,
-  Video,
   ChevronRight,
   Stethoscope,
   BadgeCheck,
   GraduationCap,
+  CalendarX2,
 } from "lucide-react";
 import SidebarMedico from "@/components/medico/SidebarMedico";
 import TopbarMedico from "@/components/medico/TopbarMedico";
+import { supabase } from "@/lib/supabase";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
@@ -26,28 +28,181 @@ const fadeUp = {
   }),
 };
 
-const stats = [
-  { label: "Pacientes hoy", value: "8", icon: Users, color: "#0d9488" },
-  { label: "Consultas semana", value: "34", icon: CalendarClock, color: "#8b5cf6" },
-  { label: "Recetas emitidas", value: "126", icon: FileText, color: "#0891b2" },
-  { label: "Horas disponibles", value: "6h", icon: Clock, color: "#f59e0b" },
-];
+interface PerfilDoctor {
+  id: number;
+  nombres: string;
+  apellidos: string;
+  especialidad: string | null;
+  colegio_numero: string | null;
+  foto_url: string | null;
+}
 
-const agendaHoy = [
-  { hora: "09:00", paciente: "Andrea Flores", motivo: "Control de ortodoncia", estado: "Confirmada" },
-  { hora: "10:30", paciente: "Luis Ramírez", motivo: "Limpieza dental", estado: "Confirmada" },
-  { hora: "11:45", paciente: "María Zambrano", motivo: "Evaluación de dolor", estado: "Pendiente" },
-  { hora: "14:00", paciente: "Carlos Mendoza", motivo: "Retiro de brackets", estado: "Confirmada" },
-];
+interface CitaHoy {
+  id: number;
+  hora: string;
+  estado: string;
+  pacientes: { id: number; nombres: string; apellidos: string } | null;
+  servicios: { nombre: string } | null;
+}
 
-const pacientesRecientes = [
-  { nombre: "Andrea Flores", ultima: "Hace 2 días", diagnostico: "Ortodoncia en curso" },
-  { nombre: "Luis Ramírez", ultima: "Hace 5 días", diagnostico: "Limpieza — sin novedad" },
-  { nombre: "María Zambrano", ultima: "Hoy", diagnostico: "Pendiente evaluación" },
-];
+interface PacienteReciente {
+  id: number;
+  nombre: string;
+  fecha: string;
+  diagnostico: string | null;
+}
+
+function formatHora(hora: string) {
+  const [h, m] = hora.split(":").map(Number);
+  const periodo = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${periodo}`;
+}
+
+function formatFechaRelativa(fechaISO: string) {
+  const hoy = new Date().toISOString().split("T")[0];
+  const ayer = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  if (fechaISO === hoy) return "Hoy";
+  if (fechaISO === ayer) return "Ayer";
+  const [y, m, d] = fechaISO.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+const DIAS_SEMANA = ["DOMINGO", "LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES", "SABADO"];
 
 export default function DashboardMedicoPage() {
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const [doctor, setDoctor] = useState<PerfilDoctor | null>(null);
+  const [citasHoy, setCitasHoy] = useState<CitaHoy[] | null>(null);
+  const [citasSemana, setCitasSemana] = useState<number>(0);
+  const [recetasEmitidas, setRecetasEmitidas] = useState<number>(0);
+  const [horasDisponibles, setHorasDisponibles] = useState<number>(0);
+  const [pacientesRecientes, setPacientesRecientes] = useState<PacienteReciente[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+
+    async function cargar() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { data: doctorData, error: doctorError } = await supabase
+        .from("doctores")
+        .select("id, nombres, apellidos, especialidad, colegio_numero, foto_url")
+        .eq("id_usuario", user.id)
+        .single();
+
+      if (doctorError || !doctorData) {
+        if (activo) setError("No encontramos tu perfil de doctor. Contacta a administración.");
+        return;
+      }
+
+      if (!activo) return;
+      setDoctor(doctorData);
+
+      const hoy = new Date();
+      const hoyISO = hoy.toISOString().split("T")[0];
+
+      const inicioSemana = new Date(hoy);
+      inicioSemana.setDate(hoy.getDate() - hoy.getDay());
+      const finSemana = new Date(inicioSemana);
+      finSemana.setDate(inicioSemana.getDate() + 6);
+
+      const { data: citasHoyData } = await supabase
+        .from("citas")
+        .select("id, hora, estado, pacientes ( id, nombres, apellidos ), servicios ( nombre )")
+        .eq("id_doctor", doctorData.id)
+        .eq("fecha", hoyISO)
+        .neq("estado", "CANCELADA")
+        .order("hora", { ascending: true });
+
+      if (activo) setCitasHoy((citasHoyData as unknown as CitaHoy[]) ?? []);
+
+      const { count: citasSemanaCount } = await supabase
+        .from("citas")
+        .select("*", { count: "exact", head: true })
+        .eq("id_doctor", doctorData.id)
+        .gte("fecha", inicioSemana.toISOString().split("T")[0])
+        .lte("fecha", finSemana.toISOString().split("T")[0])
+        .neq("estado", "CANCELADA");
+
+      if (activo) setCitasSemana(citasSemanaCount ?? 0);
+
+      const { data: evoluciones } = await supabase
+        .from("evolucion_clinica")
+        .select("id")
+        .eq("id_doctor", doctorData.id);
+
+      const idsEvoluciones = (evoluciones ?? []).map((e) => e.id);
+
+      if (idsEvoluciones.length > 0) {
+        const { count: recetasCount } = await supabase
+          .from("recetas_medicas")
+          .select("*", { count: "exact", head: true })
+          .in("id_evolucion", idsEvoluciones);
+        if (activo) setRecetasEmitidas(recetasCount ?? 0);
+      }
+
+      const diaSemana = DIAS_SEMANA[hoy.getDay()];
+      const { data: horarioHoy } = await supabase
+        .from("horarios_doctores")
+        .select("hora_inicio, hora_fin")
+        .eq("id_doctor", doctorData.id)
+        .eq("dia_semana", diaSemana)
+        .maybeSingle();
+
+      if (horarioHoy && activo) {
+        const [hi, mi] = horarioHoy.hora_inicio.split(":").map(Number);
+        const [hf, mf] = horarioHoy.hora_fin.split(":").map(Number);
+        const totalHoras = hf + mf / 60 - (hi + mi / 60);
+        const ocupadas = (citasHoyData ?? []).length;
+        setHorasDisponibles(Math.max(0, Math.round(totalHoras - ocupadas)));
+      }
+
+      const { data: recientesData } = await supabase
+        .from("evolucion_clinica")
+        .select(
+          `fecha, diagnostico,
+           historia_clinica ( pacientes ( id, nombres, apellidos ) )`
+        )
+        .eq("id_doctor", doctorData.id)
+        .order("fecha", { ascending: false })
+        .limit(3);
+
+      if (activo) {
+        setPacientesRecientes(
+          ((recientesData as any[]) ?? []).map((r, i) => ({
+            id: r.historia_clinica?.pacientes?.id ?? i,
+            nombre: r.historia_clinica?.pacientes
+              ? `${r.historia_clinica.pacientes.nombres} ${r.historia_clinica.pacientes.apellidos}`
+              : "Paciente",
+            fecha: r.fecha,
+            diagnostico: r.diagnostico,
+          }))
+        );
+      }
+    }
+
+    cargar();
+    return () => {
+      activo = false;
+    };
+  }, []);
+
+  const stats = [
+    { label: "Pacientes hoy", value: citasHoy === null ? "—" : String(citasHoy.length), icon: Users, color: "#0d9488" },
+    { label: "Consultas semana", value: String(citasSemana), icon: CalendarClock, color: "#8b5cf6" },
+    { label: "Recetas emitidas", value: String(recetasEmitidas), icon: FileText, color: "#0891b2" },
+    { label: "Horas disponibles hoy", value: `${horasDisponibles}h`, icon: Clock, color: "#f59e0b" },
+  ];
+
+  const primerNombre = doctor?.nombres?.split(" ")[0] ?? "";
 
   return (
     <main className="min-h-screen bg-[#f6f7fb]">
@@ -58,7 +213,12 @@ export default function DashboardMedicoPage() {
           <TopbarMedico onMenuClick={() => setSidebarOpen(true)} />
 
           <div className="p-4 md:p-6 xl:p-8 max-w-[1600px] mx-auto">
-            {/* ============ HERO CON IMAGEN — identidad clínica/profesional ============ */}
+            {error && (
+              <div className="mb-5 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3.5 text-sm text-rose-700 font-medium">
+                {error}
+              </div>
+            )}
+
             <motion.div
               initial="hidden"
               animate="show"
@@ -82,7 +242,6 @@ export default function DashboardMedicoPage() {
               <div className="absolute -top-20 -left-20 w-96 h-96 rounded-full bg-teal-400/10 blur-3xl" />
 
               <div className="relative z-10 grid lg:grid-cols-[1.3fr_1fr] gap-8 items-center p-6 sm:p-8 md:p-10">
-                {/* TEXTO */}
                 <div>
                   <div className="flex items-center gap-2 mb-4">
                     <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
@@ -92,46 +251,52 @@ export default function DashboardMedicoPage() {
                   </div>
 
                   <h1 className="text-white font-bold text-2xl sm:text-3xl md:text-4xl xl:text-5xl leading-[1.1] mb-3 tracking-tight">
-                    Buen día, Dr. Vega
+                    {doctor ? `Buen día, Dr(a). ${primerNombre}` : "Buen día"}
                   </h1>
                   <p className="text-slate-300 max-w-lg text-sm sm:text-[15px] leading-relaxed mb-6">
-                    Tienes 4 consultas programadas para hoy. Tu criterio clínico
-                    y dedicación son la base de la confianza de tus pacientes.
+                    {citasHoy === null
+                      ? "Cargando tu agenda de hoy…"
+                      : citasHoy.length > 0
+                      ? `Tienes ${citasHoy.length} consulta${citasHoy.length === 1 ? "" : "s"} programada${citasHoy.length === 1 ? "" : "s"} para hoy. Tu criterio clínico y dedicación son la base de la confianza de tus pacientes.`
+                      : "No tienes consultas programadas para hoy."}
                   </p>
 
-                  {/* CREDENCIALES — refuerzan autoridad profesional */}
                   <div className="flex flex-wrap gap-3">
-                    <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs sm:text-sm text-teal-100">
-                      <BadgeCheck size={15} className="text-teal-400" />
-                      Col. Odontológico N.º 4521
-                    </span>
-                    <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs sm:text-sm text-teal-100">
-                      <GraduationCap size={15} className="text-teal-400" />
-                      Esp. en Ortodoncia
-                    </span>
+                    {doctor?.colegio_numero && (
+                      <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs sm:text-sm text-teal-100">
+                        <BadgeCheck size={15} className="text-teal-400" />
+                        Col. Odontológico N.º {doctor.colegio_numero}
+                      </span>
+                    )}
+                    {doctor?.especialidad && (
+                      <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs sm:text-sm text-teal-100">
+                        <GraduationCap size={15} className="text-teal-400" />
+                        {doctor.especialidad}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {/* IMAGEN DEL PROFESIONAL — marco elegante con glow */}
                 <div className="relative hidden lg:block">
                   <div className="absolute -inset-4 rounded-[36px] bg-gradient-to-br from-teal-400/20 to-cyan-500/10 blur-2xl" />
                   <div className="relative rounded-[28px] overflow-hidden border border-white/10 shadow-2xl aspect-[4/5]">
                     <img
-                      src="/imagenes/Quienes-somos.jpeg"
-                      alt="Dr. Carlos Vega"
+                      src={doctor?.foto_url || "/imagenes/Quienes-somos.jpeg"}
+                      alt={doctor ? `${doctor.nombres} ${doctor.apellidos}` : "Doctor"}
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0a2e2c]/70 via-transparent to-transparent" />
                     <div className="absolute bottom-4 left-4 right-4">
-                      <p className="text-white font-bold text-lg">Dr. Carlos Vega</p>
-                      <p className="text-teal-200 text-xs">Ortodoncista · 10+ años de experiencia</p>
+                      <p className="text-white font-bold text-lg">
+                        {doctor ? `${doctor.nombres} ${doctor.apellidos}` : "—"}
+                      </p>
+                      <p className="text-teal-200 text-xs">{doctor?.especialidad ?? "Odontología General"}</p>
                     </div>
                   </div>
                 </div>
               </div>
             </motion.div>
 
-            {/* ESTADÍSTICAS */}
             <motion.div
               initial="hidden"
               animate="show"
@@ -156,7 +321,6 @@ export default function DashboardMedicoPage() {
               })}
             </motion.div>
 
-            {/* AGENDA + PACIENTES RECIENTES */}
             <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 gap-6">
               <motion.div
                 initial="hidden"
@@ -168,44 +332,66 @@ export default function DashboardMedicoPage() {
                 <div className="flex items-center justify-between mb-5">
                   <div>
                     <h2 className="text-lg sm:text-2xl font-black text-slate-800">Agenda de Hoy</h2>
-                    <p className="text-xs sm:text-sm text-slate-500">4 consultas programadas</p>
+                    <p className="text-xs sm:text-sm text-slate-500">
+                      {citasHoy === null
+                        ? "Cargando…"
+                        : `${citasHoy.length} consulta${citasHoy.length === 1 ? "" : "s"} programada${citasHoy.length === 1 ? "" : "s"}`}
+                    </p>
                   </div>
-                  <button className="text-sm font-semibold text-teal-600 hover:underline hidden sm:block">
-                    Ver semana completa
-                  </button>
                 </div>
 
-                <div className="space-y-3">
-                  {agendaHoy.map((cita, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-4 p-3 sm:p-4 rounded-2xl border border-slate-100 hover:border-teal-200 hover:bg-teal-50/30 transition-colors"
-                    >
-                      <div className="w-14 sm:w-16 text-center shrink-0">
-                        <p className="text-sm sm:text-base font-bold text-slate-800">{cita.hora}</p>
-                      </div>
-                      <div className="w-px h-10 bg-slate-100" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-slate-800 truncate">{cita.paciente}</p>
-                        <p className="text-xs sm:text-sm text-slate-500 truncate">{cita.motivo}</p>
-                      </div>
-                      <span
-                        className={`
-                          text-[11px] font-semibold px-3 py-1.5 rounded-full shrink-0
-                          ${cita.estado === "Confirmada"
-                            ? "bg-emerald-50 text-emerald-600"
-                            : "bg-amber-50 text-amber-600"
-                          }
-                        `}
-                      >
-                        {cita.estado}
-                      </span>
-                      <button className="hidden sm:flex w-9 h-9 rounded-xl bg-slate-100 items-center justify-center shrink-0 hover:bg-teal-100">
-                        <Video size={16} className="text-slate-600" />
-                      </button>
+                {citasHoy === null ? (
+                  <div className="space-y-3">
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className="h-[76px] rounded-2xl bg-slate-100 animate-pulse" />
+                    ))}
+                  </div>
+                ) : citasHoy.length === 0 ? (
+                  <div className="flex flex-col items-center text-center gap-3 py-10">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center">
+                      <CalendarX2 size={20} className="text-slate-400" />
                     </div>
-                  ))}
-                </div>
+                    <p className="text-sm font-semibold text-slate-600">No tienes citas hoy</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {citasHoy.map((cita) => (
+                      <div
+                        key={cita.id}
+                        onClick={() => {
+                          if (cita.pacientes) router.push(`/medico/pacientes/${cita.pacientes.id}/historia`);
+                        }}
+                        className={`flex items-center gap-4 p-3 sm:p-4 rounded-2xl border border-slate-100 hover:border-teal-200 hover:bg-teal-50/30 transition-colors ${cita.pacientes ? "cursor-pointer" : ""}`}
+                      >
+                        <div className="w-14 sm:w-16 text-center shrink-0">
+                          <p className="text-sm sm:text-base font-bold text-slate-800">{formatHora(cita.hora)}</p>
+                        </div>
+                        <div className="w-px h-10 bg-slate-100" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-800 truncate">
+                            {cita.pacientes ? `${cita.pacientes.nombres} ${cita.pacientes.apellidos}` : "Paciente"}
+                          </p>
+                          <p className="text-xs sm:text-sm text-slate-500 truncate">
+                            {cita.servicios?.nombre ?? "Consulta"}
+                          </p>
+                        </div>
+                        <span
+                          className={`
+                            text-[11px] font-semibold px-3 py-1.5 rounded-full shrink-0
+                            ${cita.estado === "CONFIRMADA"
+                              ? "bg-emerald-50 text-emerald-600"
+                              : cita.estado === "ATENDIDA"
+                              ? "bg-slate-100 text-slate-500"
+                              : "bg-amber-50 text-amber-600"
+                            }
+                          `}
+                        >
+                          {cita.estado}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </motion.div>
 
               <motion.div
@@ -218,30 +404,49 @@ export default function DashboardMedicoPage() {
                 <h2 className="text-lg sm:text-xl font-black text-slate-800 mb-5">
                   Pacientes Recientes
                 </h2>
-                <div className="space-y-3">
-                  {pacientesRecientes.map((p, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-50 transition-colors cursor-pointer"
-                    >
-                      <div className="w-11 h-11 rounded-full bg-gradient-to-br from-teal-500 to-cyan-700 flex items-center justify-center text-white font-bold shrink-0">
-                        {p.nombre.charAt(0)}
+
+                {pacientesRecientes === null ? (
+                  <div className="space-y-3">
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className="h-[60px] rounded-2xl bg-slate-100 animate-pulse" />
+                    ))}
+                  </div>
+                ) : pacientesRecientes.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-6">
+                    Aún no has registrado consultas.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {pacientesRecientes.map((p) => (
+                      <div
+                        key={p.id}
+                        className="flex items-center gap-3 p-3 rounded-2xl hover:bg-slate-50 transition-colors cursor-pointer"
+                        onClick={() => router.push("/medico/pacientes")}
+                      >
+                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-teal-500 to-cyan-700 flex items-center justify-center text-white font-bold shrink-0">
+                          {p.nombre.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800 truncate">{p.nombre}</p>
+                          <p className="text-xs text-slate-500 truncate">
+                            {p.diagnostico ?? "Sin diagnóstico registrado"} · {formatFechaRelativa(p.fecha)}
+                          </p>
+                        </div>
+                        <ChevronRight size={16} className="text-slate-300 shrink-0" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-800 truncate">{p.nombre}</p>
-                        <p className="text-xs text-slate-500 truncate">{p.diagnostico}</p>
-                      </div>
-                      <ChevronRight size={16} className="text-slate-300 shrink-0" />
-                    </div>
-                  ))}
-                </div>
-                <button className="w-full mt-4 py-3 rounded-2xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => router.push("/medico/pacientes")}
+                  className="w-full mt-4 py-3 rounded-2xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
                   Ver todos mis pacientes
                 </button>
               </motion.div>
             </div>
 
-            {/* ACCESOS RÁPIDOS */}
             <motion.div
               initial="hidden"
               animate="show"

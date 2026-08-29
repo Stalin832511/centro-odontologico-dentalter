@@ -1,6 +1,7 @@
 "use client";
 
 import { Search, Bell, Settings, Menu } from "lucide-react";
+import ProfileMenu from "@/components/ProfileMenu";
 
 interface TopbarProps {
   onMenuClick?: () => void;
@@ -49,17 +50,11 @@ export default function TopbarMedico({ onMenuClick }: TopbarProps) {
           <button className="hidden sm:flex w-12 h-12 rounded-xl bg-slate-100 items-center justify-center">
             <Settings size={20} />
           </button>
-          <div className="flex items-center gap-3 bg-white rounded-2xl px-2 sm:px-3 py-2 shadow-sm">
-            <img
-              src="/imagenes/Quienes-somos.jpeg"
-              alt="Médico"
-              className="w-9 h-9 sm:w-11 sm:h-11 rounded-full object-cover"
-            />
-            <div className="hidden md:block">
-              <h3 className="text-sm font-bold text-slate-800">Dr. Carlos Vega</h3>
-              <p className="text-xs text-slate-500">Médico</p>
-            </div>
-          </div>
+
+          {/* PERFIL — ahora es un menú desplegable con foto real
+              (si existe) y, si la cuenta tiene doble rol, el
+              botón para cambiar de panel */}
+          <ProfileMenu currentPanel="medico" />
         </div>
       </div>
     </header>

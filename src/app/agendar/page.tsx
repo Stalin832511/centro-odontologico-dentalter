@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // Navbar
 import Navbar from "@/components/Navbar";
+
+// Cliente de Supabase — ajusta la ruta si es distinta en tu proyecto
+import { supabase } from "@/lib/supabase";
 
 // Iconos premium
 import {
@@ -19,6 +22,7 @@ import {
   IdCard,
   Sparkles,
   Mail as MailIcon,
+  PhoneCall,
 } from "lucide-react";
 
 // Funciones reales de conexión a Supabase
@@ -27,6 +31,21 @@ import {
   crearCita,
   enviarLinkActivacion,
 } from "@/services/pacientes";
+
+// ============================================================
+// Tipos de los catálogos reales (ya no hardcodeados)
+// ============================================================
+interface Doctor {
+  id: number;
+  nombres: string;
+  apellidos: string;
+  especialidad: string | null;
+}
+
+interface Servicio {
+  id: number;
+  nombre: string;
+}
 
 export default function AgendarConsulta() {
   // ===============================
@@ -39,8 +58,8 @@ export default function AgendarConsulta() {
     cedula: "",
     telefono: "",
     email: "",
-    servicio_id: "1",
-    doctor_id: "1",
+    servicio_id: "",
+    doctor_id: "",
     fecha: "",
     hora: "",
     observaciones: "",
@@ -51,12 +70,74 @@ export default function AgendarConsulta() {
 
   const [resultado, setResultado] = useState<{
     esNuevo: boolean;
+    tieneCorreo: boolean;
   } | null>(null);
+
+  // Catálogos reales, traídos de Supabase en vez de hardcodeados.
+  const [doctores, setDoctores] = useState<Doctor[]>([]);
+  const [servicios, setServicios] = useState<Servicio[]>([]);
+  const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
+  const [errorCatalogos, setErrorCatalogos] = useState<string | null>(null);
 
   // 🐛 Estado temporal de diagnóstico — muestra el error real en pantalla,
   // útil para depurar en celular donde no hay acceso fácil a la consola.
   // Quitar una vez confirmemos que todo funciona bien.
   const [errorDebug, setErrorDebug] = useState<string>("");
+
+  // ===============================
+  // CARGAR DOCTORES Y SERVICIOS REALES
+  // ===============================
+  useEffect(() => {
+    let activo = true;
+
+    async function cargarCatalogos() {
+      setCargandoCatalogos(true);
+      setErrorCatalogos(null);
+
+      const [
+        { data: doctoresData, error: doctoresError },
+        { data: serviciosData, error: serviciosError },
+      ] = await Promise.all([
+        supabase
+          .from("doctores")
+          .select("id, nombres, apellidos, especialidad")
+          .eq("estado", true)
+          .order("nombres", { ascending: true }),
+        supabase
+          .from("servicios")
+          .select("id, nombre")
+          .eq("activo", true)
+          .order("nombre", { ascending: true }),
+      ]);
+
+      if (!activo) return;
+
+      if (doctoresError || serviciosError) {
+        setErrorCatalogos(
+          "No pudimos cargar los doctores y servicios disponibles. Recarga la página."
+        );
+        setCargandoCatalogos(false);
+        return;
+      }
+
+      setDoctores(doctoresData ?? []);
+      setServicios(serviciosData ?? []);
+
+      // Preseleccionamos el primero de cada lista, si existe.
+      setForm((prev) => ({
+        ...prev,
+        doctor_id: doctoresData?.[0]?.id ? String(doctoresData[0].id) : "",
+        servicio_id: serviciosData?.[0]?.id ? String(serviciosData[0].id) : "",
+      }));
+
+      setCargandoCatalogos(false);
+    }
+
+    cargarCatalogos();
+    return () => {
+      activo = false;
+    };
+  }, []);
 
   // ===============================
   // VALIDAR CÉDULA ECUADOR
@@ -106,21 +187,33 @@ export default function AgendarConsulta() {
       return;
     }
 
+    // VALIDAR QUE HAYA UN DOCTOR Y SERVICIO SELECCIONADOS
+    if (!form.doctor_id || !form.servicio_id) {
+      alert("❌ Selecciona un servicio y un especialista válidos.");
+      return;
+    }
+
+    const correoIngresado = form.email.trim();
+    const tieneCorreo = correoIngresado.length > 0;
+
     try {
       setLoading(true);
 
       // 1) Busca al paciente por cédula, o lo crea si no existe.
+      //    El correo es opcional: pacientes de la tercera edad o sin
+      //    acceso a tecnología pueden agendar sin dar un email.
       const { paciente, esNuevo } = await buscarOCrearPaciente({
         nombres: form.nombres,
         apellidos: form.apellidos,
         cedula: form.cedula,
         telefono: form.telefono,
-        email: form.email,
+        email: tieneCorreo ? correoIngresado : undefined,
       });
 
-      // 2) Si es un paciente nuevo, le enviamos el correo real de activación
-      if (esNuevo) {
-        await enviarLinkActivacion(form.email, form.cedula);
+      // 2) Solo enviamos el correo de activación si es paciente nuevo
+      //    Y además dio un correo real. Sin correo, no hay a dónde enviarlo.
+      if (esNuevo && tieneCorreo) {
+        await enviarLinkActivacion(correoIngresado, form.cedula);
       }
 
       // 3) Creamos la cita, vinculada al paciente (nuevo o existente)
@@ -134,18 +227,18 @@ export default function AgendarConsulta() {
       });
 
       // MENSAJE ÉXITO
-      setResultado({ esNuevo });
+      setResultado({ esNuevo, tieneCorreo });
       setSuccess(true);
 
-      // LIMPIAR FORMULARIO
+      // LIMPIAR FORMULARIO (conservamos el doctor/servicio por defecto)
       setForm({
         nombres: "",
         apellidos: "",
         cedula: "",
         telefono: "",
         email: "",
-        servicio_id: "1",
-        doctor_id: "1",
+        servicio_id: servicios[0]?.id ? String(servicios[0].id) : "",
+        doctor_id: doctores[0]?.id ? String(doctores[0].id) : "",
         fecha: "",
         hora: "",
         observaciones: "",
@@ -259,6 +352,23 @@ export default function AgendarConsulta() {
                   </p>
                 </div>
               </div>
+
+              {/* NUEVO: aviso pensado para pacientes de la tercera edad
+                  o sin acceso a tecnología */}
+              <div className="flex items-start gap-4 bg-white/50 backdrop-blur-xl p-5 rounded-3xl border border-white/40 shadow-lg">
+                <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-cyan-400 to-sky-500 flex items-center justify-center text-white shrink-0 shadow-xl">
+                  <PhoneCall size={30} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold mb-2">
+                    ¿No tienes correo electrónico?
+                  </h3>
+                  <p className="text-slate-600 leading-relaxed">
+                    No hay problema. Puedes agendar tu cita solo con tu
+                    cédula y teléfono — te contactaremos directamente.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -273,6 +383,15 @@ export default function AgendarConsulta() {
               </h3>
             </div>
 
+            {/* ERROR AL CARGAR CATÁLOGOS */}
+            {errorCatalogos && (
+              <div className="mb-8 bg-amber-50 border border-amber-300 rounded-2xl p-4">
+                <p className="text-sm font-semibold text-amber-800">
+                  {errorCatalogos}
+                </p>
+              </div>
+            )}
+
             {/* 🐛 CAJA DE ERROR DE DIAGNÓSTICO (temporal) */}
             {errorDebug && (
               <div className="mb-8 bg-red-50 border border-red-300 rounded-2xl p-4">
@@ -285,8 +404,8 @@ export default function AgendarConsulta() {
               </div>
             )}
 
-            {/* MENSAJE ÉXITO */}
-            {success && (
+            {/* MENSAJE ÉXITO — ahora con 3 variantes distintas */}
+            {success && resultado && (
               <div className="mb-8 bg-emerald-500/10 border border-emerald-400/30 rounded-3xl p-6 flex items-start gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white shrink-0">
                   <CheckCircle2 size={30} />
@@ -301,7 +420,8 @@ export default function AgendarConsulta() {
                     confirmará la cita muy pronto.
                   </p>
 
-                  {resultado?.esNuevo && (
+                  {/* Caso 1: paciente nuevo CON correo */}
+                  {resultado.esNuevo && resultado.tieneCorreo && (
                     <div className="mt-5 pt-5 border-t border-emerald-400/20 flex items-start gap-3">
                       <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm">
                         <MailIcon size={16} className="text-cyan-600" />
@@ -319,7 +439,28 @@ export default function AgendarConsulta() {
                     </div>
                   )}
 
-                  {resultado && !resultado.esNuevo && (
+                  {/* Caso 2: paciente nuevo SIN correo (tercera edad / sin tecnología) */}
+                  {resultado.esNuevo && !resultado.tieneCorreo && (
+                    <div className="mt-5 pt-5 border-t border-emerald-400/20 flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm">
+                        <PhoneCall size={16} className="text-cyan-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-700 mb-1">
+                          Te contactaremos por teléfono
+                        </p>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          Como no dejaste un correo, no creamos un portal en
+                          línea — pero tu cita y tus datos ya quedaron
+                          registrados. Nuestro equipo te llamará al número
+                          que nos diste para confirmar tu cita.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Caso 3: paciente ya existente */}
+                  {!resultado.esNuevo && (
                     <p className="mt-4 pt-4 border-t border-emerald-400/20 text-xs text-slate-500">
                       Ya tenías una cuenta con nosotros — esta cita se agregó
                       directamente a tu historial.
@@ -388,7 +529,9 @@ export default function AgendarConsulta() {
                 />
                 <p className="text-xs text-slate-500 mt-2">
                   Usamos tu cédula para identificarte si ya eres paciente
-                  nuestro, o para crear tu cuenta si es tu primera vez.
+                  nuestro, o para crear tu cuenta si es tu primera vez. Este
+                  dato sí es obligatorio: es la forma en que te identificamos
+                  de manera única en la clínica.
                 </p>
               </div>
 
@@ -408,18 +551,24 @@ export default function AgendarConsulta() {
                   }
                   className="w-full rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-200 transition-all"
                 />
+                <p className="text-xs text-slate-500 mt-2">
+                  Te contactaremos aquí para confirmar tu cita, sobre todo si
+                  no dejas un correo electrónico.
+                </p>
               </div>
 
-              {/* EMAIL */}
+              {/* EMAIL — ahora OPCIONAL */}
               <div>
                 <label className="flex items-center gap-2 text-slate-700 font-semibold mb-3">
                   <Mail size={18} />
-                  Correo Electrónico
+                  Correo Electrónico{" "}
+                  <span className="text-slate-400 font-normal text-sm">
+                    (opcional)
+                  </span>
                 </label>
                 <input
                   type="email"
-                  required
-                  placeholder="correo@gmail.com"
+                  placeholder="correo@gmail.com — déjalo en blanco si no tienes"
                   value={form.email}
                   onChange={(e) =>
                     setForm({ ...form, email: e.target.value })
@@ -427,49 +576,76 @@ export default function AgendarConsulta() {
                   className="w-full rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-200 transition-all"
                 />
                 <p className="text-xs text-slate-500 mt-2">
-                  Si eres paciente nuevo, aquí recibirás el acceso a tu
-                  portal de paciente.
+                  Solo lo necesitamos si quieres acceder a tu portal de
+                  paciente en línea (recetas, historial y citas). Si no
+                  tienes correo o prefieres no darlo, puedes dejarlo vacío
+                  — tu cita se agenda igual.
                 </p>
               </div>
 
-              {/* SERVICIO */}
+              {/* SERVICIO — cargado desde Supabase */}
               <div>
                 <label className="flex items-center gap-2 text-slate-700 font-semibold mb-3">
                   <ClipboardList size={18} />
                   Tipo de Servicio
                 </label>
                 <select
+                  required
+                  disabled={cargandoCatalogos || servicios.length === 0}
                   value={form.servicio_id}
                   onChange={(e) =>
                     setForm({ ...form, servicio_id: e.target.value })
                   }
-                  className="w-full rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-200 transition-all"
+                  className="w-full rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-200 transition-all disabled:opacity-60"
                 >
-                  <option value="1">Implantes Dentales</option>
-                  <option value="2">Diseño de Sonrisa</option>
-                  <option value="3">Ortodoncia Invisible</option>
-                  <option value="4">Blanqueamiento Láser</option>
-                  <option value="5">Endodoncia</option>
-                  <option value="6">Rehabilitación Oral</option>
+                  {cargandoCatalogos ? (
+                    <option value="">Cargando servicios…</option>
+                  ) : servicios.length === 0 ? (
+                    <option value="">No hay servicios disponibles</option>
+                  ) : (
+                    servicios.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nombre}
+                      </option>
+                    ))
+                  )}
                 </select>
+                <p className="text-xs text-slate-500 mt-2">
+                  ¿No sabes qué necesitas? Elige{" "}
+                  <span className="font-semibold text-slate-600">
+                    Consulta General
+                  </span>{" "}
+                  y nuestro equipo te orienta.
+                </p>
               </div>
 
-              {/* DOCTOR */}
+              {/* DOCTOR — cargado desde Supabase */}
               <div>
                 <label className="flex items-center gap-2 text-slate-700 font-semibold mb-3">
                   <UserRound size={18} />
                   Especialista
                 </label>
                 <select
+                  required
+                  disabled={cargandoCatalogos || doctores.length === 0}
                   value={form.doctor_id}
                   onChange={(e) =>
                     setForm({ ...form, doctor_id: e.target.value })
                   }
-                  className="w-full rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-200 transition-all"
+                  className="w-full rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-200 transition-all disabled:opacity-60"
                 >
-                  <option value="1">Dra. Tatiana Fajardo</option>
-                  <option value="2">Dr. Jackson Bravo</option>
-                  <option value="3">Dra. Deborah Maldonado</option>
+                  {cargandoCatalogos ? (
+                    <option value="">Cargando especialistas…</option>
+                  ) : doctores.length === 0 ? (
+                    <option value="">No hay especialistas disponibles</option>
+                  ) : (
+                    doctores.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.nombres} {d.apellidos}
+                        {d.especialidad ? ` · ${d.especialidad}` : ""}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -510,6 +686,10 @@ export default function AgendarConsulta() {
                   <option value="14:00">02:00 PM</option>
                   <option value="15:00">03:00 PM</option>
                 </select>
+                <p className="text-xs text-slate-500 mt-2">
+                  Si el horario elegido ya fue tomado por otro paciente, te
+                  avisaremos al enviar el formulario para que elijas otro.
+                </p>
               </div>
 
               {/* OBSERVACIONES */}
@@ -531,7 +711,7 @@ export default function AgendarConsulta() {
               {/* BOTÓN */}
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || cargandoCatalogos}
                 className="
                   w-full
                   py-5
@@ -552,7 +732,11 @@ export default function AgendarConsulta() {
                   duration-300
                 "
               >
-                {loading ? "Agendando..." : "Agendar Consulta"}
+                {loading
+                  ? "Agendando..."
+                  : cargandoCatalogos
+                  ? "Cargando disponibilidad..."
+                  : "Agendar Consulta"}
               </button>
             </form>
           </div>

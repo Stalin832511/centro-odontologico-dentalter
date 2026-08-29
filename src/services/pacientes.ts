@@ -14,7 +14,7 @@ export interface Paciente {
   nombres: string;
   apellidos: string;
   telefono: string;
-  email: string;
+  email: string | null;
   id_usuario: string | null;
 }
 
@@ -31,20 +31,28 @@ export interface Paciente {
  * actúa como una "ventanilla controlada": puede leer/escribir en
  * pacientes internamente, pero solo hace exactamente esta operación,
  * sin exponer el resto de la tabla a cualquiera con la clave pública.
+ *
+ * El correo es OPCIONAL: pensado para pacientes de la tercera edad
+ * o sin acceso a tecnología, que quieren agendar una consulta pero
+ * no tienen (o no quieren dar) un email. Si no se provee, se envía
+ * como `null` — el paciente queda registrado y su cita se agenda
+ * igual, simplemente no se le crea acceso al portal en línea.
  */
 export async function buscarOCrearPaciente(datos: {
   nombres: string;
   apellidos: string;
   cedula: string;
   telefono: string;
-  email: string;
-}): Promise<{ paciente: Paciente; esNuevo: boolean }> {
+  email?: string;
+}): Promise<{ paciente: Paciente; esNuevo: boolean; tieneCorreo: boolean }> {
+  const emailNormalizado = datos.email?.trim() ? datos.email.trim() : null;
+
   const { data, error } = await supabase.rpc("buscar_o_crear_paciente", {
     p_cedula: datos.cedula,
     p_nombres: datos.nombres,
     p_apellidos: datos.apellidos,
     p_telefono: datos.telefono,
-    p_email: datos.email,
+    p_email: emailNormalizado,
   });
 
   if (error) throw error;
@@ -57,7 +65,11 @@ export async function buscarOCrearPaciente(datos: {
   // y ya activó su cuenta antes, sí lo tendrá.
   const esNuevo = !paciente.id_usuario;
 
-  return { paciente, esNuevo };
+  return {
+    paciente,
+    esNuevo,
+    tieneCorreo: Boolean(emailNormalizado),
+  };
 }
 
 /**
@@ -69,6 +81,12 @@ export async function buscarOCrearPaciente(datos: {
  * lectura pública, eso causaría el mismo error 42501 que tuvimos
  * con `pacientes`. Un INSERT simple (sin pedir los datos de vuelta)
  * solo necesita cumplir la política de INSERT, que si es abierta.
+ *
+ * Nota de integridad: la tabla `citas` tiene un índice único parcial
+ * (id_doctor, fecha, hora) para citas no canceladas, así que si dos
+ * personas intentan tomar el mismo horario del mismo doctor, la base
+ * de datos rechaza la segunda automáticamente. Ese error de Postgres
+ * se propaga tal cual hacia quien llame esta función.
  */
 export async function crearCita(datos: {
   id_paciente: number;
@@ -91,6 +109,9 @@ export async function crearCita(datos: {
  * Guardamos la cédula en el metadata del usuario para poder vincular
  * su cuenta de auth con su fila de `pacientes` más adelante, en la
  * pantalla de activar-cuenta.
+ *
+ * Solo se debe llamar cuando SÍ hay correo — el llamador es
+ * responsable de verificar eso antes (ver agendar/page.tsx).
  */
 export async function enviarLinkActivacion(
   email: string,

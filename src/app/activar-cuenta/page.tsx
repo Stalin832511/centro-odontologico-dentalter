@@ -47,6 +47,19 @@ function traducirErrorPassword(mensaje: string) {
   return "Ocurrió un error al guardar tu contraseña. Intenta nuevamente.";
 }
 
+// Mapea el rol guardado en el metadata al panel correspondiente
+function rutaPorRol(rol: string | undefined) {
+  switch (rol) {
+    case "medico":
+      return "/medico/dashboard";
+    case "administrador":
+      return "/admin/dashboard";
+    case "paciente":
+    default:
+      return "/paciente/dashboard";
+  }
+}
+
 export default function ActivarCuentaPage() {
   const router = useRouter();
   const { user, cargando: cargandoAuth } = useAuth();
@@ -57,16 +70,9 @@ export default function ActivarCuentaPage() {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
 
-  // Detección del error que Supabase manda directo en el hash de la URL
-  // (#error=access_denied&error_code=otp_expired&...) — no depende de useAuth.
   const [linkErrorMsg, setLinkErrorMsg] = useState<string | null>(null);
-
-  // Si cargandoAuth se queda pegado en true (por ejemplo, porque el link
-  // traía un error y el listener de auth nunca dispara), no dejamos al
-  // usuario viendo el spinner para siempre.
   const [tiempoAgotado, setTiempoAgotado] = useState(false);
 
-  // Reenvío de correo de activación
   const [mostrarReenvio, setMostrarReenvio] = useState(false);
   const [emailReenvio, setEmailReenvio] = useState("");
   const [estadoReenvio, setEstadoReenvio] = useState<"idle" | "enviando" | "enviado" | "error">("idle");
@@ -89,9 +95,6 @@ export default function ActivarCuentaPage() {
     return () => clearTimeout(t);
   }, [cargandoAuth]);
 
-  // ===============================
-  // REGLAS DE CONTRASEÑA
-  // ===============================
   const requisitos = [
     { label: "Mínimo 8 caracteres", cumple: password.length >= 8 },
     { label: "Al menos una letra mayúscula", cumple: /[A-Z]/.test(password) },
@@ -102,9 +105,6 @@ export default function ActivarCuentaPage() {
   const passwordsCoinciden =
     password.length > 0 && password === confirmarPassword;
 
-  // ===============================
-  // CREAR CONTRASEÑA Y COMPLETAR ACTIVACIÓN
-  // ===============================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -121,11 +121,6 @@ export default function ActivarCuentaPage() {
 
     setEnviando(true);
 
-    // --- Paso 1: guardar la contraseña -------------------------------
-    // Separado del paso 2 a propósito: si esto tiene éxito, el usuario
-    // YA quedó activado. Un fallo posterior en la vinculación de cédula
-    // no debe hacerle creer que su contraseña no se guardó (eso era lo
-    // que causaba el error "New password should be different" al reintentar).
     const { error: updateError } = await supabase.auth.updateUser({ password });
 
     if (updateError) {
@@ -134,27 +129,27 @@ export default function ActivarCuentaPage() {
       return;
     }
 
-    // --- Paso 2: vincular su fila de `pacientes` (no bloqueante) -----
-    const cedula = user?.user_metadata?.cedula;
+    // Vinculación consciente del rol: paciente → tabla pacientes,
+    // médico → tabla doctores. No bloqueante: si falla, la cuenta
+    // ya quedó activa igual, solo no se auto-vinculó.
+    const rol = user?.user_metadata?.rol as string | undefined;
+    const cedula = user?.user_metadata?.cedula as string | undefined;
+
     if (cedula && user) {
+      const tabla = rol === "medico" ? "doctores" : "pacientes";
       const { error: linkError } = await supabase
-        .from("pacientes")
+        .from(tabla)
         .update({ id_usuario: user.id })
         .eq("cedula", cedula);
 
       if (linkError) {
-        // No detenemos el flujo del usuario por esto: su cuenta ya está
-        // activa. Lo dejamos registrado para revisarlo desde soporte.
-        console.error("No se pudo vincular la cédula al usuario:", linkError);
+        console.error(`No se pudo vincular la cédula en ${tabla}:`, linkError);
       }
     }
 
-    router.push("/paciente/dashboard");
+    router.push(rutaPorRol(rol));
   };
 
-  // ===============================
-  // REENVIAR ENLACE DE ACTIVACIÓN
-  // ===============================
   const handleReenviar = async (e: React.FormEvent) => {
     e.preventDefault();
     setMensajeReenvio("");
@@ -180,9 +175,6 @@ export default function ActivarCuentaPage() {
     setEstadoReenvio("enviado");
   };
 
-  // ===============================
-  // ESTADO: CARGANDO SESIÓN
-  // ===============================
   const mostrandoCarga = cargandoAuth && !tiempoAgotado && !linkErrorMsg;
 
   if (mostrandoCarga) {
@@ -197,9 +189,6 @@ export default function ActivarCuentaPage() {
     );
   }
 
-  // ===============================
-  // ESTADO: NO HAY SESIÓN → EL LINK NO ES VÁLIDO O YA EXPIRÓ
-  // ===============================
   if (!user) {
     return (
       <main className="min-h-screen relative flex items-center justify-center overflow-hidden px-5">
@@ -298,9 +287,14 @@ export default function ActivarCuentaPage() {
     );
   }
 
-  // ===============================
-  // ESTADO: FORMULARIO DE ACTIVACIÓN
-  // ===============================
+  const rolActual = user.user_metadata?.rol as string | undefined;
+  const tituloBienvenida =
+    rolActual === "medico" ? "Bienvenido, Doctor(a)" : "Tu cita ya está agendada";
+  const subtituloBienvenida =
+    rolActual === "medico"
+      ? "Solo falta un paso: crea tu contraseña para acceder a tu panel médico, donde gestionarás tus pacientes, agenda e historias clínicas."
+      : "Solo falta un paso: crea tu contraseña para acceder a tu portal de paciente, donde podrás ver tu receta médica, historial y próximas citas.";
+
   return (
     <main className="min-h-screen relative flex items-center justify-center overflow-hidden">
       <div className="absolute inset-0">
@@ -320,15 +314,11 @@ export default function ActivarCuentaPage() {
           </div>
 
           <h1 className="text-5xl xl:text-6xl font-black leading-tight mb-6">
-            Tu cita ya
-            <br />
-            está agendada
+            {tituloBienvenida}
           </h1>
 
           <p className="text-xl text-white/80 leading-relaxed max-w-xl">
-            Solo falta un paso: crea tu contraseña para acceder a tu portal
-            de paciente, donde podrás ver tu receta médica, historial y
-            próximas citas.
+            {subtituloBienvenida}
           </p>
         </div>
 
@@ -336,7 +326,7 @@ export default function ActivarCuentaPage() {
           <div className="bg-white/10 backdrop-blur-2xl border border-white/20 shadow-2xl rounded-[32px] sm:rounded-[40px] p-6 sm:p-8 md:p-10">
             <div className="text-center mb-6 sm:mb-8">
               <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-[26px] sm:rounded-[30px] bg-white flex items-center justify-center text-4xl sm:text-5xl mb-4 sm:mb-5">
-                🦷
+                {rolActual === "medico" ? "🩺" : "🦷"}
               </div>
               <h2 className="text-white text-3xl sm:text-4xl font-black mb-2">
                 Activa tu cuenta
