@@ -1,44 +1,23 @@
-// Importamos Navbar
 import Navbar from "@/components/Navbar";
-
-// Importamos Hero
 import Hero from "@/sections/Hero";
+import Stats from "@/sections/Stats";
+import PorQueElegirnos from "@/sections/PorQueElegirnos";
+import ServiciosPreview from "@/sections/ServiciosPreview";
+import Tecnologia from "@/sections/Tecnologia";
+import CTAFinal from "@/sections/CTAFinal";
+import Footer from "@/sections/Footer";
 
-
-// Página principal
 export default function Page() {
-
-  // Retorna interfaz
   return (
-
-    // Main principal
-    <main
-
-      className="
-
-        // Ancho completo
-        w-full
-
-        // Altura mínima pantalla
-        min-h-screen
-
-        // Fondo negro
-        bg-black
-
-        // Texto blanco
-        text-white
-
-        // Evita scroll horizontal
-        overflow-x-hidden
-      "
-    >
-
-      {/* Navbar */}
+    <main className="w-full min-h-screen bg-black text-white overflow-x-hidden">
       <Navbar />
-
-      {/* Hero */}
       <Hero />
-
+      <Stats />
+      <PorQueElegirnos />
+      <ServiciosPreview />
+      <Tecnologia />
+      <CTAFinal />
+      <Footer />
     </main>
   );
 }

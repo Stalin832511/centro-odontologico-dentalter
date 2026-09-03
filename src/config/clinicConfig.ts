@@ -1,11 +1,11 @@
 export const clinicConfig = {
 
   // Nombre clínica
-  clinicName: "FajardoDental",
+  clinicName: "DentalTER",
 
   // Texto logo
-  logoWhite: "Fajardo",
-  logoColor: "Dental",
+  logoWhite: "Dental",
+  logoColor: "TER",
 
   // Color principal
   primaryColor: "#02D3F1",
@@ -14,11 +14,11 @@ export const clinicConfig = {
   secondaryColor: "#06b6d4",
 
   // Contacto
-  whatsapp: "0999999999",
+  whatsapp: "+593 93 939 1465",
   email: "contacto@dentalcare.com",
 
   // Dirección
-  address: "Puyo - Ecuador",
+  address: "Durán Recreo  - Guayas - Ecuador",
 
   // Video principal
   heroVideo: "/videos/Video-de-portada.mp4",
