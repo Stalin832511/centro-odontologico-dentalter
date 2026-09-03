@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CalendarPlus,
@@ -16,9 +17,11 @@ import {
   CalendarX2,
   ClipboardList,
   AlertCircle,
+  CheckCircle2,
 } from "lucide-react";
 import SidebarPaciente from "@/components/paciente/SidebarPaciente";
 import TopbarPaciente from "@/components/paciente/TopbarPaciente";
+import AgendarCitaModal from "@/components/paciente/AgendarCitaModal";
 import { supabase } from "@/lib/supabase";
 
 // ============================================================
@@ -111,7 +114,7 @@ const ESTADO_ESTILOS: Record<string, { bg: string; text: string; label: string }
 };
 
 // ============================================================
-// Skeletons — evitan el "salto" de layout mientras carga
+// Skeletons
 // ============================================================
 function SkeletonLine({ w = "w-full" }: { w?: string }) {
   return <div className={`h-3.5 rounded-full bg-slate-200/70 animate-pulse ${w}`} />;
@@ -131,7 +134,7 @@ function SkeletonCitaCard() {
 }
 
 // ============================================================
-// Estado vacío reutilizable — versión con más presencia visual
+// Estado vacío reutilizable
 // ============================================================
 function EmptyState({
   icon: Icon,
@@ -150,8 +153,6 @@ function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center text-center gap-4 py-12 px-4">
-      {/* Ícono con badge de gradiente + glow de fondo, en vez de un
-          ícono chico flotando solo en espacio en blanco */}
       <div className="relative">
         <div
           className="absolute inset-0 rounded-full blur-xl opacity-30"
@@ -194,8 +195,7 @@ function EmptyState({
 }
 
 // ============================================================
-// Estado vacío especial para historial — mini timeline fantasma,
-// comunica "aquí va una secuencia de eventos" incluso sin datos
+// Estado vacío especial para historial
 // ============================================================
 function EmptyTimeline({ description }: { description: string }) {
   return (
@@ -226,8 +226,11 @@ function EmptyTimeline({ description }: { description: string }) {
 // ============================================================
 // Componente principal
 // ============================================================
-export default function DashboardPacientePage() {
+function DashboardPacienteContent() {
+  const searchParams = useSearchParams();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [modalAgendarAbierto, setModalAgendarAbierto] = useState(false);
+  const [mensajeExito, setMensajeExito] = useState<string | null>(null);
 
   const [paciente, setPaciente] = useState<Paciente | null>(null);
   const [proximaCita, setProximaCita] = useState<CitaProxima | null>(null);
@@ -237,101 +240,97 @@ export default function DashboardPacientePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let activo = true;
+  async function cargarDashboard() {
+    setLoading(true);
+    setError(null);
 
-    async function cargarDashboard() {
-      setLoading(true);
-      setError(null);
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-      try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError || !user) {
-          throw new Error("No se pudo verificar tu sesión. Vuelve a iniciar sesión.");
-        }
-
-        const { data: pacienteData, error: pacienteError } = await supabase
-          .from("pacientes")
-          .select("id, nombres, apellidos")
-          .eq("id_usuario", user.id)
-          .single();
-
-        if (pacienteError || !pacienteData) {
-          throw new Error("No encontramos tu ficha de paciente. Contacta a recepción.");
-        }
-
-        if (!activo) return;
-        setPaciente(pacienteData);
-
-        const hoyISO = new Date().toISOString().split("T")[0];
-
-        const { data: citaData } = await supabase
-          .from("citas")
-          .select(
-            `id, fecha, hora, estado, observacion,
-             doctores ( nombres, apellidos ),
-             servicios ( nombre )`
-          )
-          .eq("id_paciente", pacienteData.id)
-          .neq("estado", "CANCELADA")
-          .gte("fecha", hoyISO)
-          .order("fecha", { ascending: true })
-          .order("hora", { ascending: true })
-          .limit(1)
-          .maybeSingle();
-
-        if (activo) setProximaCita((citaData as unknown as CitaProxima) ?? null);
-
-        const { data: historiaData } = await supabase
-          .from("historia_clinica")
-          .select("id")
-          .eq("id_paciente", pacienteData.id)
-          .maybeSingle();
-
-        if (historiaData?.id) {
-          const { data: evoluciones } = await supabase
-            .from("evolucion_clinica")
-            .select("id, fecha, tratamiento, diagnostico, doctores ( nombres, apellidos )")
-            .eq("id_historia", historiaData.id)
-            .order("fecha", { ascending: false });
-
-          if (activo) {
-            setHistorial(((evoluciones as unknown as EvolucionHistorial[]) ?? []).slice(0, 3));
-          }
-
-          const idsEvoluciones = (evoluciones ?? []).map((e) => e.id);
-
-          if (idsEvoluciones.length > 0) {
-            const { data: recetasData } = await supabase
-              .from("recetas_medicas")
-              .select(
-                `id, medicamento, dosis, frecuencia, duracion,
-                 evolucion_clinica ( fecha, doctores ( nombres, apellidos ) )`
-              )
-              .eq("estado", "ACTIVA")
-              .in("id_evolucion", idsEvoluciones);
-
-            if (activo) setRecetas((recetasData as unknown as RecetaActiva[]) ?? []);
-          }
-        }
-      } catch (err) {
-        if (activo) {
-          setError(err instanceof Error ? err.message : "Ocurrió un error al cargar tu información.");
-        }
-      } finally {
-        if (activo) setLoading(false);
+      if (userError || !user) {
+        throw new Error("No se pudo verificar tu sesión. Vuelve a iniciar sesión.");
       }
-    }
 
+      const { data: pacienteData, error: pacienteError } = await supabase
+        .from("pacientes")
+        .select("id, nombres, apellidos")
+        .eq("id_usuario", user.id)
+        .single();
+
+      if (pacienteError || !pacienteData) {
+        throw new Error("No encontramos tu ficha de paciente. Contacta a recepción.");
+      }
+
+      setPaciente(pacienteData);
+
+      const hoyISO = new Date().toISOString().split("T")[0];
+
+      const { data: citaData } = await supabase
+        .from("citas")
+        .select(
+          `id, fecha, hora, estado, observacion,
+           doctores ( nombres, apellidos ),
+           servicios ( nombre )`
+        )
+        .eq("id_paciente", pacienteData.id)
+        .neq("estado", "CANCELADA")
+        .gte("fecha", hoyISO)
+        .order("fecha", { ascending: true })
+        .order("hora", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      setProximaCita((citaData as unknown as CitaProxima) ?? null);
+
+      const { data: historiaData } = await supabase
+        .from("historia_clinica")
+        .select("id")
+        .eq("id_paciente", pacienteData.id)
+        .maybeSingle();
+
+      if (historiaData?.id) {
+        const { data: evoluciones } = await supabase
+          .from("evolucion_clinica")
+          .select("id, fecha, tratamiento, diagnostico, doctores ( nombres, apellidos )")
+          .eq("id_historia", historiaData.id)
+          .order("fecha", { ascending: false });
+
+        setHistorial(((evoluciones as unknown as EvolucionHistorial[]) ?? []).slice(0, 3));
+
+        const idsEvoluciones = (evoluciones ?? []).map((e) => e.id);
+
+        if (idsEvoluciones.length > 0) {
+          const { data: recetasData } = await supabase
+            .from("recetas_medicas")
+            .select(
+              `id, medicamento, dosis, frecuencia, duracion,
+               evolucion_clinica ( fecha, doctores ( nombres, apellidos ) )`
+            )
+            .eq("estado", "ACTIVA")
+            .in("id_evolucion", idsEvoluciones);
+
+          setRecetas((recetasData as unknown as RecetaActiva[]) ?? []);
+        }
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ocurrió un error al cargar tu información.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
     cargarDashboard();
-    return () => {
-      activo = false;
-    };
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("agendar") === "1") {
+      setModalAgendarAbierto(true);
+    }
+  }, [searchParams]);
 
   const nombrePila = primerNombre(paciente?.nombres);
 
@@ -344,8 +343,19 @@ export default function DashboardPacientePage() {
           <TopbarPaciente onMenuClick={() => setSidebarOpen(true)} />
 
           <div className="p-4 md:p-6 xl:p-8 max-w-[1600px] mx-auto">
-            {/* ============ BANNER DE ERROR GLOBAL ============ */}
+            {/* ============ BANNERS ============ */}
             <AnimatePresence>
+              {mensajeExito && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  className="mb-5 flex items-center gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3.5"
+                >
+                  <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />
+                  <p className="text-sm text-emerald-700 font-medium">{mensajeExito}</p>
+                </motion.div>
+              )}
               {error && (
                 <motion.div
                   initial={{ opacity: 0, y: -8 }}
@@ -405,11 +415,14 @@ export default function DashboardPacientePage() {
                   </p>
 
                   <button
+                    onClick={() => setModalAgendarAbierto(true)}
+                    disabled={!paciente}
                     className="
                       inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl
                       text-white font-semibold text-sm
                       shadow-lg shadow-sky-950/30
                       transition-transform hover:scale-[1.03]
+                      disabled:opacity-60 disabled:hover:scale-100
                     "
                     style={{ background: "linear-gradient(135deg, #0ea5e9, #0369a1)" }}
                   >
@@ -440,7 +453,6 @@ export default function DashboardPacientePage() {
 
             {/* ============ PRÓXIMA CITA + RECETA ============ */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* --- CITA + HISTORIAL --- */}
               <motion.div
                 initial="hidden"
                 animate="show"
@@ -491,8 +503,11 @@ export default function DashboardPacientePage() {
                       </div>
                     </div>
 
-                    <button className="w-full sm:w-auto px-5 py-3 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shrink-0">
-                      Reagendar
+                    <button
+                      onClick={() => setModalAgendarAbierto(true)}
+                      className="w-full sm:w-auto px-5 py-3 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shrink-0"
+                    >
+                      Agendar otra
                     </button>
                   </div>
                 ) : (
@@ -501,7 +516,7 @@ export default function DashboardPacientePage() {
                     title="No tienes citas próximas"
                     description="Cuando agendes una consulta, aparecerá aquí con todos los detalles."
                     actionLabel="Agendar una cita"
-                    onAction={() => (window.location.href = "/agendar")}
+                    onAction={() => setModalAgendarAbierto(true)}
                     color="#0ea5e9"
                   />
                 )}
@@ -642,6 +657,7 @@ export default function DashboardPacientePage() {
                   icon: Pill,
                   color: "#0ea5e9",
                   badge: recetas.length > 0 ? recetas.length : null,
+                  accion: null as (() => void) | null,
                 },
                 {
                   label: "Radiografías",
@@ -649,6 +665,7 @@ export default function DashboardPacientePage() {
                   icon: ScanLine,
                   color: "#8b5cf6",
                   badge: null,
+                  accion: () => (window.location.href = "/paciente/resultados"),
                 },
                 {
                   label: "Chat Doctor",
@@ -656,6 +673,7 @@ export default function DashboardPacientePage() {
                   icon: MessageSquareText,
                   color: "#10b981",
                   badge: null,
+                  accion: null,
                 },
                 {
                   label: "Agendar Cita",
@@ -663,12 +681,15 @@ export default function DashboardPacientePage() {
                   icon: CalendarPlus,
                   color: "#f59e0b",
                   badge: null,
+                  accion: () => setModalAgendarAbierto(true),
                 },
               ].map((action, i) => {
                 const Icon = action.icon;
                 return (
                   <button
                     key={i}
+                    onClick={() => action.accion?.()}
+                    disabled={!action.accion}
                     className="
                       group relative bg-white rounded-2xl p-5
                       shadow-lg shadow-slate-200/50
@@ -677,6 +698,7 @@ export default function DashboardPacientePage() {
                       text-left
                       hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/60
                       transition-all duration-200
+                      disabled:opacity-60 disabled:hover:translate-y-0 disabled:cursor-default
                     "
                   >
                     {action.badge !== null && (
@@ -702,15 +724,17 @@ export default function DashboardPacientePage() {
                       <p className="text-xs text-slate-400 mt-0.5">{action.description}</p>
                     </div>
 
-                    <ChevronRight
-                      size={16}
-                      className="
-                        absolute bottom-4 right-4 text-slate-300
-                        opacity-0 -translate-x-1
-                        group-hover:opacity-100 group-hover:translate-x-0
-                        transition-all duration-200
-                      "
-                    />
+                    {action.accion && (
+                      <ChevronRight
+                        size={16}
+                        className="
+                          absolute bottom-4 right-4 text-slate-300
+                          opacity-0 -translate-x-1
+                          group-hover:opacity-100 group-hover:translate-x-0
+                          transition-all duration-200
+                        "
+                      />
+                    )}
                   </button>
                 );
               })}
@@ -718,6 +742,27 @@ export default function DashboardPacientePage() {
           </div>
         </section>
       </div>
+
+      {modalAgendarAbierto && paciente && (
+        <AgendarCitaModal
+          idPaciente={paciente.id}
+          onClose={() => setModalAgendarAbierto(false)}
+          onGuardado={() => {
+            setModalAgendarAbierto(false);
+            setMensajeExito("¡Tu cita fue agendada correctamente!");
+            cargarDashboard();
+            setTimeout(() => setMensajeExito(null), 4000);
+          }}
+        />
+      )}
     </main>
+  );
+}
+
+export default function DashboardPacientePage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardPacienteContent />
+    </Suspense>
   );
 }

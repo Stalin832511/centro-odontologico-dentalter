@@ -18,11 +18,6 @@ export interface PacienteDelMedico {
 /**
  * Devuelve el id de la fila en `doctores` que corresponde al
  * usuario actualmente logueado (busca por id_usuario = auth.uid()).
- *
- * Todas las escrituras clínicas (evolucion_clinica.id_doctor, etc.)
- * necesitan este id numérico, NO el auth.uid() del médico — son
- * dos cosas distintas: uno identifica la cuenta de login, el otro
- * identifica la fila de doctor en el negocio.
  */
 export async function obtenerIdDoctorActual(): Promise<number> {
   const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -47,12 +42,6 @@ export async function obtenerIdDoctorActual(): Promise<number> {
 
 /**
  * Lista los pacientes del médico logueado.
- *
- * No hace falta filtrar nada a mano: la política RLS
- * `medico_ve_sus_pacientes` ya limita el SELECT solo a los
- * pacientes que tienen (o tuvieron) cita con este doctor.
- * Esta función es idéntica en espíritu a la de `admin/pacientes`,
- * solo que aquí la base de datos hace el filtrado por nosotros.
  */
 export async function obtenerMisPacientes(): Promise<PacienteDelMedico[]> {
   const { data, error } = await supabase
@@ -66,26 +55,21 @@ export async function obtenerMisPacientes(): Promise<PacienteDelMedico[]> {
 
 // ============================================================
 // Perfil del doctor para mostrar identidad real (nombre, foto)
-// en CUALQUIER panel donde la cuenta logueada esté vinculada a
-// una fila de `doctores` — se usa tanto en el panel médico como
-// en el panel admin cuando la misma persona (ej. la dueña) tiene
-// también un registro como doctora.
 // ============================================================
 export interface PerfilDoctorActual {
   id: number;
   nombres: string;
   apellidos: string;
+  cedula: string;
+  telefono: string | null;
+  email: string | null;
   especialidad: string | null;
   foto_url: string | null;
 }
 
 /**
  * Devuelve el perfil de doctor vinculado a la cuenta logueada,
- * o null si esta cuenta no tiene ninguna fila en `doctores`
- * (ej. un administrador que no es también doctor). A diferencia
- * de obtenerIdDoctorActual(), esta función NO lanza error si no
- * encuentra nada — es para mostrar identidad, no para escribir
- * datos clínicos.
+ * o null si esta cuenta no tiene ninguna fila en `doctores`.
  */
 export async function obtenerMiPerfilDoctor(): Promise<PerfilDoctorActual | null> {
   const { data: userData } = await supabase.auth.getUser();
@@ -93,10 +77,99 @@ export async function obtenerMiPerfilDoctor(): Promise<PerfilDoctorActual | null
 
   const { data, error } = await supabase
     .from("doctores")
-    .select("id, nombres, apellidos, especialidad, foto_url")
+    .select("id, nombres, apellidos, cedula, telefono, email, especialidad, foto_url")
     .eq("id_usuario", userData.user.id)
     .maybeSingle();
 
   if (error || !data) return null;
   return data;
+}
+
+/**
+ * Actualiza los datos de contacto del médico logueado
+ * (teléfono, correo, especialidad). El nombre y la cédula NO se
+ * editan aquí — igual que con pacientes, esos son datos de
+ * identidad que solo el administrador puede corregir.
+ */
+export async function actualizarMisDatosDoctor(
+  idDoctor: number,
+  datos: { telefono?: string | null; email?: string | null; especialidad?: string | null }
+): Promise<void> {
+  const { error } = await supabase
+    .from("doctores")
+    .update(datos)
+    .eq("id", idDoctor);
+
+  if (error) throw error;
+}
+
+/**
+ * Sube (o reemplaza) la foto de perfil del médico logueado.
+ * Reutiliza el mismo bucket "avatares" que ya usan los pacientes
+ * — la carpeta se organiza por auth.uid(), así que funciona igual
+ * sin importar el rol.
+ */
+export async function subirFotoPerfilDoctor(
+  idDoctor: number,
+  archivo: File
+): Promise<string> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) throw new Error("Debes iniciar sesión para subir tu foto.");
+
+  const extension = archivo.name.split(".").pop();
+  const rutaArchivo = `${user.id}/perfil.${extension}`;
+
+  const { error: errorSubida } = await supabase.storage
+    .from("avatares")
+    .upload(rutaArchivo, archivo, { upsert: true });
+
+  if (errorSubida) throw errorSubida;
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from("avatares").getPublicUrl(rutaArchivo);
+
+  const { error: errorUpdate } = await supabase
+    .from("doctores")
+    .update({ foto_url: publicUrl })
+    .eq("id", idDoctor);
+
+  if (errorUpdate) throw errorUpdate;
+
+  return publicUrl;
+}
+
+// ============================================================
+// Citas de la semana (para "Mis Consultas")
+// ============================================================
+export interface CitaSemana {
+  id: number;
+  fecha: string;
+  hora: string;
+  estado: string;
+  pacientes: { id: number; nombres: string; apellidos: string } | null;
+  servicios: { nombre: string } | null;
+}
+
+export async function obtenerCitasSemana(
+  idDoctor: number,
+  fechaInicio: string,
+  fechaFin: string
+): Promise<CitaSemana[]> {
+  const { data, error } = await supabase
+    .from("citas")
+    .select(
+      "id, fecha, hora, estado, pacientes ( id, nombres, apellidos ), servicios ( nombre )"
+    )
+    .eq("id_doctor", idDoctor)
+    .gte("fecha", fechaInicio)
+    .lte("fecha", fechaFin)
+    .order("fecha", { ascending: true })
+    .order("hora", { ascending: true });
+
+  if (error) throw error;
+  return (data as unknown as CitaSemana[]) ?? [];
 }

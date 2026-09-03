@@ -32,6 +32,13 @@ import {
   enviarLinkActivacion,
 } from "@/services/pacientes";
 
+// Disponibilidad real (mismo motor que usan el panel admin y el
+// dashboard del paciente logueado)
+import {
+  obtenerHorariosDisponibles,
+  SlotDisponibilidad,
+} from "@/services/disponibilidad";
+
 // ============================================================
 // Tipos de los catálogos reales (ya no hardcodeados)
 // ============================================================
@@ -78,6 +85,11 @@ export default function AgendarConsulta() {
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [cargandoCatalogos, setCargandoCatalogos] = useState(true);
   const [errorCatalogos, setErrorCatalogos] = useState<string | null>(null);
+
+  // Disponibilidad real: se recalcula cada vez que cambia el
+  // doctor o la fecha elegidos.
+  const [slots, setSlots] = useState<SlotDisponibilidad[]>([]);
+  const [cargandoSlots, setCargandoSlots] = useState(false);
 
   // 🐛 Estado temporal de diagnóstico — muestra el error real en pantalla,
   // útil para depurar en celular donde no hay acceso fácil a la consola.
@@ -140,6 +152,28 @@ export default function AgendarConsulta() {
   }, []);
 
   // ===============================
+  // DISPONIBILIDAD REAL — se recalcula al cambiar doctor o fecha
+  // ===============================
+  useEffect(() => {
+    if (!form.doctor_id || !form.fecha) {
+      setSlots([]);
+      return;
+    }
+    let activo = true;
+    setCargandoSlots(true);
+    obtenerHorariosDisponibles(Number(form.doctor_id), form.fecha)
+      .then((data) => {
+        if (activo) setSlots(data);
+      })
+      .finally(() => {
+        if (activo) setCargandoSlots(false);
+      });
+    return () => {
+      activo = false;
+    };
+  }, [form.doctor_id, form.fecha]);
+
+  // ===============================
   // VALIDAR CÉDULA ECUADOR
   // ===============================
 
@@ -193,6 +227,12 @@ export default function AgendarConsulta() {
       return;
     }
 
+    // VALIDAR QUE HAYA UNA HORA DISPONIBLE ELEGIDA
+    if (!form.hora) {
+      alert("❌ Elige un horario disponible antes de continuar.");
+      return;
+    }
+
     const correoIngresado = form.email.trim();
     const tieneCorreo = correoIngresado.length > 0;
 
@@ -243,6 +283,7 @@ export default function AgendarConsulta() {
         hora: "",
         observaciones: "",
       });
+      setSlots([]);
     } catch (error) {
       console.error(error);
       // 🐛 Mostramos el error real en pantalla (temporal)
@@ -630,7 +671,7 @@ export default function AgendarConsulta() {
                   disabled={cargandoCatalogos || doctores.length === 0}
                   value={form.doctor_id}
                   onChange={(e) =>
-                    setForm({ ...form, doctor_id: e.target.value })
+                    setForm({ ...form, doctor_id: e.target.value, hora: "" })
                   }
                   className="w-full rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-200 transition-all disabled:opacity-60"
                 >
@@ -659,36 +700,65 @@ export default function AgendarConsulta() {
                   type="date"
                   required
                   value={form.fecha}
+                  min={new Date().toISOString().split("T")[0]}
                   onChange={(e) =>
-                    setForm({ ...form, fecha: e.target.value })
+                    setForm({ ...form, fecha: e.target.value, hora: "" })
                   }
                   className="w-full rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-200 transition-all"
                 />
               </div>
 
-              {/* HORA */}
+              {/* HORA — ahora con disponibilidad real, no lista fija */}
               <div>
                 <label className="flex items-center gap-2 text-slate-700 font-semibold mb-3">
                   <Clock3 size={18} />
                   Hora Disponible
                 </label>
-                <select
-                  required
-                  value={form.hora}
-                  onChange={(e) => setForm({ ...form, hora: e.target.value })}
-                  className="w-full rounded-2xl border border-slate-200 bg-white/80 px-5 py-4 outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-200 transition-all"
-                >
-                  <option value="">Selecciona una hora</option>
-                  <option value="08:00">08:00 AM</option>
-                  <option value="09:00">09:00 AM</option>
-                  <option value="10:00">10:00 AM</option>
-                  <option value="11:00">11:00 AM</option>
-                  <option value="14:00">02:00 PM</option>
-                  <option value="15:00">03:00 PM</option>
-                </select>
+
+                {!form.doctor_id || !form.fecha ? (
+                  <p className="text-sm text-slate-500 bg-white/60 rounded-2xl px-5 py-4 border border-slate-200">
+                    Elige especialista y fecha para ver los horarios
+                    disponibles ese día.
+                  </p>
+                ) : cargandoSlots ? (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                      <div
+                        key={i}
+                        className="h-12 rounded-xl bg-slate-200/60 animate-pulse"
+                      />
+                    ))}
+                  </div>
+                ) : slots.length === 0 ? (
+                  <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
+                    Este especialista no atiende ese día, o ya no quedan
+                    horarios disponibles. Prueba con otra fecha.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {slots.map((s) => (
+                      <button
+                        key={s.hora}
+                        type="button"
+                        disabled={!s.disponible}
+                        onClick={() => setForm({ ...form, hora: s.hora })}
+                        className={`py-3 rounded-xl text-sm font-semibold transition-all ${
+                          form.hora === s.hora
+                            ? "bg-gradient-to-r from-cyan-400 to-sky-500 text-white shadow-lg"
+                            : s.disponible
+                            ? "bg-white/80 border border-slate-200 text-slate-700 hover:border-cyan-300 hover:bg-cyan-50"
+                            : "bg-slate-100 border border-slate-100 text-slate-300 line-through cursor-not-allowed"
+                        }`}
+                      >
+                        {s.hora}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <p className="text-xs text-slate-500 mt-2">
-                  Si el horario elegido ya fue tomado por otro paciente, te
-                  avisaremos al enviar el formulario para que elijas otro.
+                  Estos horarios ya reflejan lo que hay ocupado — si ves una
+                  hora disponible aquí, es porque de verdad está libre.
                 </p>
               </div>
 
@@ -711,7 +781,7 @@ export default function AgendarConsulta() {
               {/* BOTÓN */}
               <button
                 type="submit"
-                disabled={loading || cargandoCatalogos}
+                disabled={loading || cargandoCatalogos || !form.hora}
                 className="
                   w-full
                   py-5

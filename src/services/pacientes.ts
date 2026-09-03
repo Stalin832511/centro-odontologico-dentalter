@@ -128,3 +128,42 @@ export async function enviarLinkActivacion(
 
   if (error) throw error;
 }
+
+/**
+ * Sube (o reemplaza) la foto de perfil del paciente logueado.
+ * Se guarda en Storage bajo una carpeta con su propio user id
+ * (requisito de la política de seguridad), y actualiza el campo
+ * foto_url en su fila de `pacientes` con la URL pública resultante.
+ */
+export async function subirFotoPerfil(
+  idPaciente: number,
+  archivo: File
+): Promise<string> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) throw new Error("Debes iniciar sesión para subir tu foto.");
+
+  const extension = archivo.name.split(".").pop();
+  const rutaArchivo = `${user.id}/perfil.${extension}`;
+
+  const { error: errorSubida } = await supabase.storage
+    .from("avatares")
+    .upload(rutaArchivo, archivo, { upsert: true });
+
+  if (errorSubida) throw errorSubida;
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from("avatares").getPublicUrl(rutaArchivo);
+
+  const { error: errorUpdate } = await supabase
+    .from("pacientes")
+    .update({ foto_url: publicUrl })
+    .eq("id", idPaciente);
+
+  if (errorUpdate) throw errorUpdate;
+
+  return publicUrl;
+}

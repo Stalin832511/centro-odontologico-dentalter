@@ -13,6 +13,7 @@ import {
   AlertCircle,
   CheckCircle2,
   User,
+  SlidersHorizontal,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -79,6 +80,13 @@ export default function TablaCitas() {
   const [error, setError] = useState<string | null>(null);
   const [mensajeExito, setMensajeExito] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
+
+  // --- Filtros nuevos (adicionales a la búsqueda de texto) ---
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
+  const [filtroEstado, setFiltroEstado] = useState<string>("");
+  const [filtroDoctor, setFiltroDoctor] = useState<string>("");
+  const [filtroDesde, setFiltroDesde] = useState<string>("");
+  const [filtroHasta, setFiltroHasta] = useState<string>("");
 
   const [doctores, setDoctores] = useState<Doctor[]>([]);
   const [servicios, setServicios] = useState<Servicio[]>([]);
@@ -147,13 +155,30 @@ export default function TablaCitas() {
     cargarCatalogos();
   }, []);
 
+  const hayFiltrosActivos =
+    filtroEstado !== "" || filtroDoctor !== "" || filtroDesde !== "" || filtroHasta !== "";
+
+  function limpiarFiltros() {
+    setFiltroEstado("");
+    setFiltroDoctor("");
+    setFiltroDesde("");
+    setFiltroHasta("");
+  }
+
   const citasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return citas;
-    return citas.filter((c) =>
-      `${c.paciente_nombre} ${c.doctor_nombre} ${c.servicio_nombre}`.toLowerCase().includes(q)
-    );
-  }, [busqueda, citas]);
+
+    return citas.filter((c) => {
+      if (q && !`${c.paciente_nombre} ${c.doctor_nombre} ${c.servicio_nombre}`.toLowerCase().includes(q)) {
+        return false;
+      }
+      if (filtroEstado && c.estado !== filtroEstado) return false;
+      if (filtroDoctor && String(c.id_doctor) !== filtroDoctor) return false;
+      if (filtroDesde && c.fecha < filtroDesde) return false;
+      if (filtroHasta && c.fecha > filtroHasta) return false;
+      return true;
+    });
+  }, [busqueda, citas, filtroEstado, filtroDoctor, filtroDesde, filtroHasta]);
 
   async function confirmarEliminacion() {
     if (!citaAEliminar) return;
@@ -215,16 +240,92 @@ export default function TablaCitas() {
         </div>
       )}
 
-      {/* BUSCADOR */}
-      <div className="relative mb-6 print:hidden">
-        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar por paciente, doctor o servicio..."
-          className="w-full bg-slate-100 rounded-2xl py-3 pl-12 pr-4 outline-none focus:ring-2 focus:ring-cyan-400"
-        />
+      {/* BUSCADOR + FILTROS */}
+      <div className="mb-6 print:hidden">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por paciente, doctor o servicio..."
+              className="w-full bg-slate-100 rounded-2xl py-3 pl-12 pr-4 outline-none focus:ring-2 focus:ring-cyan-400"
+            />
+          </div>
+          <button
+            onClick={() => setFiltrosAbiertos((v) => !v)}
+            className={`flex items-center justify-center gap-2 px-5 py-3 rounded-2xl font-semibold text-sm shrink-0 transition-colors ${
+              filtrosAbiertos || hayFiltrosActivos
+                ? "bg-cyan-100 text-cyan-700"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            <SlidersHorizontal size={16} />
+            Filtros
+            {hayFiltrosActivos && (
+              <span className="w-2 h-2 rounded-full bg-cyan-500" />
+            )}
+          </button>
+        </div>
+
+        {filtrosAbiertos && (
+          <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 rounded-2xl p-4">
+            <div>
+              <label className="text-xs font-semibold text-slate-500 block mb-1.5">Estado</label>
+              <select
+                value={filtroEstado}
+                onChange={(e) => setFiltroEstado(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-400/40 bg-white"
+              >
+                <option value="">Todos</option>
+                {ESTADOS.map((e) => (
+                  <option key={e} value={e}>{e}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-500 block mb-1.5">Doctor</label>
+              <select
+                value={filtroDoctor}
+                onChange={(e) => setFiltroDoctor(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-400/40 bg-white"
+              >
+                <option value="">Todos</option>
+                {doctores.map((d) => (
+                  <option key={d.id} value={d.id}>{d.nombres} {d.apellidos}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-500 block mb-1.5">Desde</label>
+              <input
+                type="date"
+                value={filtroDesde}
+                onChange={(e) => setFiltroDesde(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-400/40 bg-white"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-500 block mb-1.5">Hasta</label>
+              <input
+                type="date"
+                value={filtroHasta}
+                onChange={(e) => setFiltroHasta(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-400/40 bg-white"
+              />
+            </div>
+
+            {hayFiltrosActivos && (
+              <button
+                onClick={limpiarFiltros}
+                className="col-span-2 md:col-span-4 text-xs font-semibold text-slate-500 hover:text-rose-600 text-left"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* TABLA */}
@@ -237,7 +338,9 @@ export default function TablaCitas() {
       ) : citasFiltradas.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-sm font-semibold text-slate-600">
-            {busqueda ? "No se encontraron citas con esa búsqueda" : "Aún no hay citas registradas"}
+            {busqueda || hayFiltrosActivos
+              ? "No se encontraron citas con esos criterios"
+              : "Aún no hay citas registradas"}
           </p>
         </div>
       ) : (

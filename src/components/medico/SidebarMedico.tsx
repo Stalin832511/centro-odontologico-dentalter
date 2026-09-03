@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   CalendarClock,
@@ -10,10 +11,13 @@ import {
   ScanLine,
   MessageSquareText,
   Clock,
+  UserCog,
   LogOut,
   ChevronRight,
   X,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { obtenerMiPerfilDoctor, PerfilDoctorActual } from "@/services/medico";
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -22,6 +26,13 @@ interface SidebarProps {
 
 export default function SidebarMedico({ isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const [perfil, setPerfil] = useState<PerfilDoctorActual | null>(null);
+
+  useEffect(() => {
+    obtenerMiPerfilDoctor().then(setPerfil);
+  }, []);
 
   const menus = [
     { icon: LayoutDashboard, title: "Dashboard", href: "/medico/dashboard" },
@@ -31,7 +42,15 @@ export default function SidebarMedico({ isOpen = false, onClose }: SidebarProps)
     { icon: ScanLine, title: "Radiografías", href: "/medico/radiografias" },
     { icon: MessageSquareText, title: "Chat", href: "/medico/chat" },
     { icon: Clock, title: "Mi Horario", href: "/medico/horario" },
+    { icon: UserCog, title: "Mis Datos", href: "/medico/perfil" },
   ];
+
+  const nombreMostrar = perfil ? `${perfil.nombres} ${perfil.apellidos}` : null;
+
+  async function handleCerrarSesion() {
+    await supabase.auth.signOut();
+    router.push("/admin/login");
+  }
 
   return (
     <>
@@ -70,16 +89,28 @@ export default function SidebarMedico({ isOpen = false, onClose }: SidebarProps)
           </div>
         </div>
 
-        {/* PERFIL */}
+        {/* PERFIL — dinámico, con foto y nombre reales */}
         <div className="px-6">
           <div className="bg-white/10 rounded-3xl p-5 backdrop-blur-xl">
-            <img
-              src="/imagenes/Quienes-somos.jpeg"
-              alt="Doctor"
-              className="w-20 h-20 rounded-full object-cover border-4 border-white mx-auto"
-            />
-            <h2 className="text-center font-bold mt-4">Dr. Carlos Vega</h2>
-            <p className="text-center text-white/70 text-sm">Ortodoncista</p>
+            {perfil?.foto_url ? (
+              <img
+                src={perfil.foto_url}
+                alt={nombreMostrar ?? "Doctor"}
+                className="w-20 h-20 rounded-full object-cover border-4 border-white mx-auto"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-white/20 border-4 border-white mx-auto flex items-center justify-center text-3xl font-black text-white">
+                {nombreMostrar?.charAt(0) ?? "D"}
+              </div>
+            )}
+            {nombreMostrar ? (
+              <h2 className="text-center font-bold mt-4">{nombreMostrar}</h2>
+            ) : (
+              <div className="h-4 w-28 mx-auto mt-4 rounded-full bg-white/20 animate-pulse" />
+            )}
+            <p className="text-center text-white/70 text-sm">
+              {perfil?.especialidad ?? "Médico"}
+            </p>
           </div>
         </div>
 
@@ -112,7 +143,10 @@ export default function SidebarMedico({ isOpen = false, onClose }: SidebarProps)
 
         {/* FOOTER */}
         <div className="p-6">
-          <button className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-red-500 hover:bg-red-600 transition-all">
+          <button
+            onClick={handleCerrarSesion}
+            className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-red-500 hover:bg-red-600 transition-all"
+          >
             <LogOut size={18} />
             Cerrar Sesión
           </button>

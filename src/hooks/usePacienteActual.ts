@@ -7,6 +7,7 @@ interface PacienteActual {
   id: number;
   nombres: string;
   apellidos: string;
+  foto_url: string | null;
 }
 
 // Hook reutilizable: obtiene los datos del paciente logueado
@@ -32,7 +33,7 @@ export function usePacienteActual() {
 
       const { data } = await supabase
         .from("pacientes")
-        .select("id, nombres, apellidos")
+        .select("id, nombres, apellidos, foto_url")
         .eq("id_usuario", user.id)
         .maybeSingle();
 

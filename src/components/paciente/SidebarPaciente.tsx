@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   CalendarPlus,
@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { usePacienteActual } from "@/hooks/usePacienteActual";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -25,17 +24,53 @@ interface SidebarProps {
 
 export default function SidebarPaciente({ isOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { paciente, cargando } = usePacienteActual();
 
+  // El parámetro ?agendar=1 decide si "Agendar Cita" está activo,
+  // en vez de solo comparar la ruta base — así "Mi Panel" y
+  // "Agendar Cita" nunca se marcan activos los dos a la vez,
+  // aunque ambos apunten a /paciente/dashboard.
+  const agendarActivo = searchParams.get("agendar") === "1";
+
   const menus = [
-    { icon: LayoutDashboard, title: "Mi Panel", href: "/paciente/dashboard" },
-    { icon: CalendarPlus, title: "Agendar Cita", href: "/paciente/agendar" },
-    { icon: FileText, title: "Mi Receta Médica", href: "/paciente/receta" },
-    { icon: ScanLine, title: "Mis Radiografías", href: "/paciente/radiografias" },
-    { icon: History, title: "Historial", href: "/paciente/historial" },
-    { icon: MessageSquareText, title: "Chat con mi Doctor", href: "/paciente/chat" },
-    { icon: UserCog, title: "Mis Datos", href: "/paciente/perfil" },
+    {
+      icon: LayoutDashboard,
+      title: "Mi Panel",
+      href: "/paciente/dashboard",
+      isActive: pathname === "/paciente/dashboard" && !agendarActivo,
+    },
+    {
+      icon: CalendarPlus,
+      title: "Agendar Cita",
+      href: "/paciente/dashboard?agendar=1",
+      isActive: pathname === "/paciente/dashboard" && agendarActivo,
+    },
+    {
+      icon: FileText,
+      title: "Mi Receta Médica",
+      href: "/paciente/receta",
+      isActive: pathname === "/paciente/receta",
+    },
+    {
+      icon: ScanLine,
+      title: "Mis Resultados",
+      href: "/paciente/resultados",
+      isActive: pathname === "/paciente/resultados",
+    },
+    {
+      icon: History,
+      title: "Historial",
+      href: "/paciente/historial",
+      isActive: pathname === "/paciente/historial",
+    },
+    {
+      icon: UserCog,
+      title: "Mis Datos",
+      href: "/paciente/perfil",
+      isActive: pathname === "/paciente/perfil",
+    },
   ];
 
   const nombreCompleto = paciente
@@ -86,7 +121,7 @@ export default function SidebarPaciente({ isOpen = false, onClose }: SidebarProp
         <div className="px-6">
           <div className="bg-white/10 rounded-3xl p-5 backdrop-blur-xl">
             <img
-              src="/imagenes/Quienes-somos.jpeg"
+              src={paciente?.foto_url || "/imagenes/Quienes-somos.jpeg"}
               alt={nombreCompleto ?? "Paciente"}
               className="w-20 h-20 rounded-full object-cover border-4 border-white mx-auto"
             />
@@ -105,14 +140,13 @@ export default function SidebarPaciente({ isOpen = false, onClose }: SidebarProp
           <div className="space-y-2">
             {menus.map((item, index) => {
               const Icon = item.icon;
-              const active = pathname === item.href;
               return (
                 <Link key={index} href={item.href} onClick={onClose}>
                   <button
                     className={`
                       w-full flex items-center justify-between
                       px-5 py-4 rounded-2xl transition-all
-                      ${active ? "bg-white text-cyan-600 shadow-xl" : "hover:bg-white/10"}
+                      ${item.isActive ? "bg-white text-cyan-600 shadow-xl" : "hover:bg-white/10"}
                     `}
                   >
                     <div className="flex items-center gap-4">
@@ -124,6 +158,19 @@ export default function SidebarPaciente({ isOpen = false, onClose }: SidebarProp
                 </Link>
               );
             })}
+
+            <button
+              disabled
+              className="w-full flex items-center justify-between px-5 py-4 rounded-2xl opacity-50 cursor-not-allowed"
+            >
+              <div className="flex items-center gap-4">
+                <MessageSquareText size={20} />
+                <span className="font-medium">Chat con mi Doctor</span>
+              </div>
+              <span className="text-[9px] font-bold uppercase bg-white/20 px-2 py-1 rounded-full">
+                Próx.
+              </span>
+            </button>
           </div>
         </div>
 

@@ -49,7 +49,7 @@ export default function TopbarPaciente({ onMenuClick }: TopbarProps) {
           </button>
           <div className="flex items-center gap-3 bg-white rounded-2xl px-2 sm:px-3 py-2 shadow-sm">
             <img
-              src="/imagenes/Quienes-somos.jpeg"
+              src={paciente?.foto_url || "/imagenes/Quienes-somos.jpeg"}
               alt={nombreCompleto}
               className="w-9 h-9 sm:w-11 sm:h-11 rounded-full object-cover"
             />

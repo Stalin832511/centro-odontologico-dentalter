@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import Sidebar from "@/components/admin/Sidebar";
 import Topbar from "@/components/admin/Topbar";
+import BuscadorHistoriaAdmin from "@/components/admin/BuscadorHistoriaAdmin";
 import { supabase } from "@/lib/supabase";
 import {
   Search,
@@ -350,7 +351,7 @@ export default function PacientesPage() {
                   Listado de Pacientes
                 </h2>
 
-                <div className="flex items-center gap-3 print:hidden">
+                <div className="flex flex-wrap items-center gap-3 print:hidden">
                   <div className="relative">
                     <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
@@ -361,6 +362,8 @@ export default function PacientesPage() {
                       className="pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm w-56 sm:w-64 focus:outline-none focus:ring-2 focus:ring-cyan-400/40 focus:border-cyan-400 transition-shadow"
                     />
                   </div>
+
+                  <BuscadorHistoriaAdmin />
 
                   <button
                     onClick={() => window.print()}

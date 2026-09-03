@@ -1,19 +1,33 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Search, Bell, Settings, Menu } from "lucide-react";
-import ProfileMenu from "@/components/ProfileMenu";
+import { obtenerMiPerfilDoctor, PerfilDoctorActual } from "@/services/medico";
 
 interface TopbarProps {
   onMenuClick?: () => void;
 }
 
 export default function TopbarMedico({ onMenuClick }: TopbarProps) {
+  const [perfil, setPerfil] = useState<PerfilDoctorActual | null>(null);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    obtenerMiPerfilDoctor()
+      .then(setPerfil)
+      .finally(() => setCargando(false));
+  }, []);
+
   const fecha = new Date().toLocaleDateString("es-EC", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
+
+  const nombreCompleto = perfil
+    ? `${perfil.nombres} ${perfil.apellidos}`
+    : "Médico";
 
   return (
     <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200 px-4 md:px-8 py-4">
@@ -51,10 +65,32 @@ export default function TopbarMedico({ onMenuClick }: TopbarProps) {
             <Settings size={20} />
           </button>
 
-          {/* PERFIL — ahora es un menú desplegable con foto real
-              (si existe) y, si la cuenta tiene doble rol, el
-              botón para cambiar de panel */}
-          <ProfileMenu currentPanel="medico" />
+          {/* PERFIL — foto y nombre reales del médico logueado */}
+          <div className="flex items-center gap-3 bg-white rounded-2xl px-2 sm:px-3 py-2 shadow-sm">
+            {perfil?.foto_url ? (
+              <img
+                src={perfil.foto_url}
+                alt={nombreCompleto}
+                className="w-9 h-9 sm:w-11 sm:h-11 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-teal-50 flex items-center justify-center text-sm font-black text-teal-600">
+                {nombreCompleto.charAt(0)}
+              </div>
+            )}
+            <div className="hidden md:block">
+              {cargando ? (
+                <div className="h-3.5 w-20 rounded-full bg-slate-200 animate-pulse" />
+              ) : (
+                <h3 className="text-sm font-bold text-slate-800 truncate max-w-[140px]">
+                  {nombreCompleto}
+                </h3>
+              )}
+              <p className="text-xs text-slate-500">
+                {perfil?.especialidad ?? "Médico"}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </header>

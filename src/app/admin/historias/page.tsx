@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import Sidebar from "@/components/admin/Sidebar";
 import Topbar from "@/components/admin/Topbar";
@@ -54,7 +55,8 @@ function formatFecha(iso: string) {
   return `${d}/${m}/${y}`;
 }
 
-export default function HistoriasClinicasPage() {
+function HistoriasClinicasContent() {
+  const searchParams = useSearchParams();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [historias, setHistorias] = useState<HistoriaResumen[]>([]);
@@ -67,7 +69,26 @@ export default function HistoriasClinicasPage() {
 
   useEffect(() => {
     cargarHistorias();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Si llegamos desde un buscador de otra página con
+  // ?codigo=HC-..., abrimos esa historia automáticamente en
+  // cuanto termine de cargar el listado.
+  useEffect(() => {
+    const codigo = searchParams.get("codigo");
+    if (!codigo || loading || historias.length === 0) return;
+
+    const encontrada = historias.find(
+      (h) => h.codigo.toLowerCase() === codigo.toLowerCase()
+    );
+    if (encontrada) {
+      abrirHistoria(encontrada);
+    } else {
+      setBusqueda(codigo);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, historias]);
 
   async function cargarHistorias() {
     setLoading(true);
@@ -355,5 +376,13 @@ export default function HistoriasClinicasPage() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function HistoriasClinicasPage() {
+  return (
+    <Suspense fallback={null}>
+      <HistoriasClinicasContent />
+    </Suspense>
   );
 }
