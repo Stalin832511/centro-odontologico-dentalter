@@ -9,42 +9,92 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  TooltipProps,
 } from "recharts";
 import { supabase } from "@/lib/supabase";
 
-const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+const MESES = [
+  "Ene",
+  "Feb",
+  "Mar",
+  "Abr",
+  "May",
+  "Jun",
+  "Jul",
+  "Ago",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dic",
+];
 
 interface PuntoGrafico {
   mes: string;
   valor: number;
 }
 
-// Tooltip personalizado en vez del default de Recharts (gris, sin estilo)
-function CustomTooltip({ active, payload, label }: TooltipProps<number, string>) {
-  if (!active || !payload || !payload.length) return null;
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    value?: number | string;
+  }>;
+  label?: string | number;
+}
+
+// Tooltip personalizado
+function CustomTooltip({
+  active,
+  payload,
+  label,
+}: CustomTooltipProps) {
+  if (!active || !payload || !payload.length) {
+    return null;
+  }
 
   return (
     <div className="bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl border border-white/10">
       <p className="text-[11px] uppercase tracking-wider text-slate-400 mb-1">
         {label}
       </p>
+
       <p className="text-lg font-bold">
         {payload[0].value}
-        <span className="text-sm font-normal text-slate-400 ml-1">citas</span>
+        <span className="text-sm font-normal text-slate-400 ml-1">
+          citas
+        </span>
       </p>
     </div>
   );
 }
 
-// Construye los últimos 6 meses (incluyendo el actual), en orden cronológico
-function ultimosSeisMeses(): { year: number; month: number; label: string }[] {
-  const resultado = [];
+// Construye los últimos 6 meses, incluyendo el actual,
+// en orden cronológico.
+function ultimosSeisMeses(): {
+  year: number;
+  month: number;
+  label: string;
+}[] {
+  const resultado: {
+    year: number;
+    month: number;
+    label: string;
+  }[] = [];
+
   const hoy = new Date();
+
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
-    resultado.push({ year: d.getFullYear(), month: d.getMonth(), label: MESES[d.getMonth()] });
+    const d = new Date(
+      hoy.getFullYear(),
+      hoy.getMonth() - i,
+      1
+    );
+
+    resultado.push({
+      year: d.getFullYear(),
+      month: d.getMonth(),
+      label: MESES[d.getMonth()],
+    });
   }
+
   return resultado;
 }
 
@@ -62,7 +112,14 @@ export default function GraficoDashboard() {
 
     async function cargarDatos() {
       const meses = ultimosSeisMeses();
-      const desde = new Date(meses[0].year, meses[0].month, 1).toISOString().split("T")[0];
+
+      const desde = new Date(
+        meses[0].year,
+        meses[0].month,
+        1
+      )
+        .toISOString()
+        .split("T")[0];
 
       const { data: citas, error } = await supabase
         .from("citas")
@@ -70,34 +127,61 @@ export default function GraficoDashboard() {
         .gte("fecha", desde)
         .neq("estado", "CANCELADA");
 
-      if (!activo) return;
+      if (!activo) {
+        return;
+      }
 
       if (error || !citas) {
-        setData(meses.map((m) => ({ mes: m.label, valor: 0 })));
+        setData(
+          meses.map((m) => ({
+            mes: m.label,
+            valor: 0,
+          }))
+        );
+
+        setCrecimiento(0);
         return;
       }
 
       const conteos = meses.map((m) => {
         const total = citas.filter((c) => {
           const [y, mo] = c.fecha.split("-").map(Number);
-          return y === m.year && mo - 1 === m.month;
+
+          return (
+            y === m.year &&
+            mo - 1 === m.month
+          );
         }).length;
-        return { mes: m.label, valor: total };
+
+        return {
+          mes: m.label,
+          valor: total,
+        };
       });
 
       setData(conteos);
 
-      // % de crecimiento del mes actual vs el anterior, para el badge
-      const actual = conteos[conteos.length - 1]?.valor ?? 0;
-      const anterior = conteos[conteos.length - 2]?.valor ?? 0;
+      // Porcentaje de crecimiento del mes actual
+      // comparado con el mes anterior.
+      const actual =
+        conteos[conteos.length - 1]?.valor ?? 0;
+
+      const anterior =
+        conteos[conteos.length - 2]?.valor ?? 0;
+
       if (anterior > 0) {
-        setCrecimiento(Math.round(((actual - anterior) / anterior) * 100));
+        setCrecimiento(
+          Math.round(
+            ((actual - anterior) / anterior) * 100
+          )
+        );
       } else {
         setCrecimiento(actual > 0 ? 100 : 0);
       }
     }
 
     cargarDatos();
+
     return () => {
       activo = false;
     };
@@ -110,6 +194,7 @@ export default function GraficoDashboard() {
           <h2 className="text-lg sm:text-2xl font-black text-slate-800">
             Rendimiento General
           </h2>
+
           <p className="text-xs sm:text-sm text-slate-500">
             Citas registradas por mes (últimos 6 meses)
           </p>
@@ -118,23 +203,58 @@ export default function GraficoDashboard() {
         {crecimiento !== null && (
           <div
             className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${
-              crecimiento >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+              crecimiento >= 0
+                ? "bg-emerald-50 text-emerald-600"
+                : "bg-rose-50 text-rose-600"
             }`}
           >
-            <span>{crecimiento >= 0 ? "↑" : "↓"}</span>
-            <span>{crecimiento >= 0 ? "+" : ""}{crecimiento}%</span>
+            <span>
+              {crecimiento >= 0 ? "↑" : "↓"}
+            </span>
+
+            <span>
+              {crecimiento >= 0 ? "+" : ""}
+              {crecimiento}%
+            </span>
           </div>
         )}
       </div>
 
       <div className="h-[260px] sm:h-[320px] md:h-[350px] w-full min-w-0">
         {isMounted && data && (
-          <ResponsiveContainer width="100%" height="100%" debounce={1}>
-            <AreaChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+          <ResponsiveContainer
+            width="100%"
+            height="100%"
+            debounce={1}
+          >
+            <AreaChart
+              data={data}
+              margin={{
+                top: 8,
+                right: 8,
+                left: -16,
+                bottom: 0,
+              }}
+            >
               <defs>
-                <linearGradient id="colorValor" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                <linearGradient
+                  id="colorValor"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="5%"
+                    stopColor="#06b6d4"
+                    stopOpacity={0.35}
+                  />
+
+                  <stop
+                    offset="95%"
+                    stopColor="#06b6d4"
+                    stopOpacity={0}
+                  />
                 </linearGradient>
               </defs>
 
@@ -148,19 +268,32 @@ export default function GraficoDashboard() {
                 dataKey="mes"
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: "#94a3b8", fontSize: 12 }}
+                tick={{
+                  fill: "#94a3b8",
+                  fontSize: 12,
+                }}
                 dy={8}
               />
 
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                tick={{ fill: "#94a3b8", fontSize: 12 }}
+                tick={{
+                  fill: "#94a3b8",
+                  fontSize: 12,
+                }}
                 width={36}
                 allowDecimals={false}
               />
 
-              <Tooltip content={<CustomTooltip />} cursor={{ stroke: "#06b6d4", strokeWidth: 1, strokeDasharray: "4 4" }} />
+              <Tooltip
+                content={<CustomTooltip />}
+                cursor={{
+                  stroke: "#06b6d4",
+                  strokeWidth: 1,
+                  strokeDasharray: "4 4",
+                }}
+              />
 
               <Area
                 type="monotone"
@@ -169,7 +302,11 @@ export default function GraficoDashboard() {
                 strokeWidth={3}
                 fillOpacity={1}
                 fill="url(#colorValor)"
-                activeDot={{ r: 6, strokeWidth: 2, stroke: "#fff" }}
+                activeDot={{
+                  r: 6,
+                  strokeWidth: 2,
+                  stroke: "#fff",
+                }}
               />
             </AreaChart>
           </ResponsiveContainer>

@@ -16,13 +16,18 @@ const fadeUp = {
   show: (i: number = 0) => ({
     opacity: 1,
     y: 0,
-    transition: { duration: 0.45, delay: i * 0.08, ease: [0.22, 1, 0.36, 1] },
+    transition: {
+      duration: 0.45,
+      delay: i * 0.08,
+      ease: [0.22, 1, 0.36, 1] as const,
+    },
   }),
 };
 
 export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [perfilDoctor, setPerfilDoctor] = useState<PerfilDoctorActual | null>(null);
+  const [perfilDoctor, setPerfilDoctor] =
+    useState<PerfilDoctorActual | null>(null);
 
   useEffect(() => {
     obtenerMiPerfilDoctor().then(setPerfilDoctor);
@@ -70,7 +75,9 @@ export default function DashboardPage() {
                       a una fila de doctor (ej. la Dra. Fajardo como
                       dueña); si no, se muestra el título genérico. */}
                   <h1 className="text-white font-bold text-2xl sm:text-3xl md:text-[42px] xl:text-5xl leading-[1.1] mb-3 tracking-tight">
-                    {perfilDoctor ? `Buen día, Dra. ${primerNombre}` : "Dashboard clínico"}
+                    {perfilDoctor
+                      ? `Buen día, Dra. ${primerNombre}`
+                      : "Dashboard clínico"}
                   </h1>
                   <p className="text-slate-400 max-w-xl text-sm sm:text-[15px] leading-relaxed">
                     Gestiona pacientes, citas médicas, doctores, especialidades
@@ -105,29 +112,63 @@ export default function DashboardPage() {
                 <div className="flex gap-6 md:gap-8 shrink-0">
                   <HeroStat label="Hoy" value="42" sublabel="citas" />
                   <div className="w-px bg-white/10" />
-                  <HeroStat label="Este mes" value="128" sublabel="registradas" />
+                  <HeroStat
+                    label="Este mes"
+                    value="128"
+                    sublabel="registradas"
+                  />
                 </div>
               </div>
             </motion.div>
 
-            <motion.div initial="hidden" animate="show" variants={fadeUp} custom={1}>
+            <motion.div
+              initial="hidden"
+              animate="show"
+              variants={fadeUp}
+              custom={1}
+            >
               <DashboardCards />
             </motion.div>
 
             <div className="mt-6 grid grid-cols-1 xl:grid-cols-3 gap-6">
-              <motion.div initial="hidden" animate="show" variants={fadeUp} custom={2} className="xl:col-span-2 min-w-0">
+              <motion.div
+                initial="hidden"
+                animate="show"
+                variants={fadeUp}
+                custom={2}
+                className="xl:col-span-2 min-w-0"
+              >
                 <GraficoDashboard />
               </motion.div>
-              <motion.div initial="hidden" animate="show" variants={fadeUp} custom={3} className="min-w-0">
+
+              <motion.div
+                initial="hidden"
+                animate="show"
+                variants={fadeUp}
+                custom={3}
+                className="min-w-0"
+              >
                 <CalendarioPremium />
               </motion.div>
             </div>
 
-            <motion.div initial="hidden" animate="show" variants={fadeUp} custom={4} className="mt-6">
+            <motion.div
+              initial="hidden"
+              animate="show"
+              variants={fadeUp}
+              custom={4}
+              className="mt-6"
+            >
               <AgendaDia />
             </motion.div>
 
-            <motion.div initial="hidden" animate="show" variants={fadeUp} custom={5} className="mt-6 overflow-x-auto">
+            <motion.div
+              initial="hidden"
+              animate="show"
+              variants={fadeUp}
+              custom={5}
+              className="mt-6 overflow-x-auto"
+            >
               <TablaCitas />
             </motion.div>
           </div>
@@ -137,10 +178,20 @@ export default function DashboardPage() {
   );
 }
 
-function HeroStat({ label, value, sublabel }: { label: string; value: string; sublabel: string }) {
+function HeroStat({
+  label,
+  value,
+  sublabel,
+}: {
+  label: string;
+  value: string;
+  sublabel: string;
+}) {
   return (
     <div className="text-right">
-      <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1">{label}</p>
+      <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1">
+        {label}
+      </p>
       <p className="text-2xl font-bold text-white leading-none">{value}</p>
       <p className="text-[11px] text-slate-500 mt-1">{sublabel}</p>
     </div>

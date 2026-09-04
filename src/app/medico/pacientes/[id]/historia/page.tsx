@@ -36,7 +36,9 @@ interface PacienteBasico {
   cedula: string;
 }
 
-function formatFecha(fechaISO: string) {
+function formatFecha(fechaISO: string | null) {
+  if (!fechaISO) return "Fecha no disponible";
+
   const [y, m, d] = fechaISO.split("T")[0].split("-");
   const meses = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
