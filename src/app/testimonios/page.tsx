@@ -15,22 +15,22 @@ export default function TestimoniosPage() {
     {
       nombre: "María Fernanda López",
       ciudad: "Guayaquil, Ecuador",
-      imagen: "/imagenes/Testimonio-1.jpeg",
+      imagen: "/imagenes/Testimonio-1.jpg",
       comentario:
         "La atención fue excelente desde el primer momento. La Dra. Tatina Fajardo me devolvió la confianza en mi sonrisa con un tratamiento moderno y totalmente profesional.",
     },
 
     {
-      nombre: "Carlos Andrés Mora",
-      ciudad: "Quito, Ecuador",
+      nombre: "Stalin Guachizaca",
+      ciudad: "Guayas, Ecuador",
       imagen: "/imagenes/Testimonio-2.jpeg",
       comentario:
         "El consultorio cuenta con tecnología avanzada y un ambiente muy elegante. Todo el proceso fue rápido, cómodo y con resultados increíbles.",
     },
 
     {
-      nombre: "Daniela Cedeño",
-      ciudad: "Cuenca, Ecuador",
+      nombre: "Nathalia Girón",
+      ciudad: "Guayas, Ecuador",
       imagen: "/imagenes/Testimonio-3.jpeg",
       comentario:
         "Me realizaron un diseño de sonrisa digital y quedé impresionada con la precisión del trabajo. Recomiendo totalmente esta clínica odontológica.",

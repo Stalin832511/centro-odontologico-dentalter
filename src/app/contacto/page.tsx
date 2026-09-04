@@ -220,7 +220,7 @@ export default function Contacto() {
                 </h3>
 
                 <p className="text-slate-600">
-                  +593 99 999 9999
+                  +593 93 939 1465
                 </p>
 
               </div>
@@ -254,7 +254,7 @@ export default function Contacto() {
                 </h3>
 
                 <p className="text-slate-600">
-                  contacto@dentalcare.com
+                  contacto@dentalter.com
                 </p>
 
               </div>

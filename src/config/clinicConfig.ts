@@ -15,7 +15,7 @@ export const clinicConfig = {
 
   // Contacto
   whatsapp: "+593 93 939 1465",
-  email: "contacto@dentalcare.com",
+  email: "contacto@dentalter.com",
 
   // Dirección
   address: "Durán Recreo  - Guayas - Ecuador",
