@@ -287,9 +287,10 @@ export default function Navbar() {
               />
             </svg>
 
-            <div className="leading-none hidden sm:block">
+            <div className="leading-none">
               <p
                 className={`
+                  hidden sm:block
                   text-[9px] md:text-[10px] lg:text-[11px]
                   font-semibold uppercase tracking-[0.3em] md:tracking-[0.35em]
                   whitespace-nowrap
@@ -300,7 +301,7 @@ export default function Navbar() {
                 Consultorio
               </p>
 
-              <h1 className="mt-0.5 md:mt-1 text-lg md:text-2xl lg:text-3xl font-extrabold uppercase tracking-wide whitespace-nowrap">
+              <h1 className="mt-0.5 md:mt-1 text-base sm:text-lg md:text-2xl lg:text-3xl font-extrabold uppercase tracking-wide whitespace-nowrap">
                 <span
                   className={`transition-colors duration-300 ${
                     isTransparentMode ? "text-white" : "text-slate-800"

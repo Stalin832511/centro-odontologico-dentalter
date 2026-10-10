@@ -6,6 +6,7 @@ import Sidebar from "@/components/admin/Sidebar";
 import Topbar from "@/components/admin/Topbar";
 import BuscadorHistoriaAdmin from "@/components/admin/BuscadorHistoriaAdmin";
 import { supabase } from "@/lib/supabase";
+import { normalizarNombre } from "@/lib/texto";
 import {
   Search,
   Plus,
@@ -570,8 +571,8 @@ function PacienteModal({
     setGuardando(true);
 
     const payload = {
-      nombres: form.nombres.trim(),
-      apellidos: form.apellidos.trim(),
+      nombres: normalizarNombre(form.nombres),
+      apellidos: normalizarNombre(form.apellidos),
       cedula: form.cedula.trim(),
       telefono: form.telefono.trim() || null,
       email: form.email.trim() || null,
@@ -720,3 +721,5 @@ function PacienteModal({
     </div>
   );
 }
+
+

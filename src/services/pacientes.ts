@@ -6,6 +6,7 @@
 // ============================================================
 
 import { supabase } from "@/lib/supabase";
+import { normalizarNombre } from "@/lib/texto";
 
 // Forma de un registro de la tabla `pacientes`
 export interface Paciente {
@@ -48,12 +49,12 @@ export async function buscarOCrearPaciente(datos: {
   const emailNormalizado = datos.email?.trim() ? datos.email.trim() : null;
 
   const { data, error } = await supabase.rpc("buscar_o_crear_paciente", {
-    p_cedula: datos.cedula,
-    p_nombres: datos.nombres,
-    p_apellidos: datos.apellidos,
-    p_telefono: datos.telefono,
-    p_email: emailNormalizado,
-  });
+  p_cedula: datos.cedula,
+  p_nombres: normalizarNombre(datos.nombres),
+  p_apellidos: normalizarNombre(datos.apellidos),
+  p_telefono: datos.telefono,
+  p_email: emailNormalizado,
+});
 
   if (error) throw error;
 

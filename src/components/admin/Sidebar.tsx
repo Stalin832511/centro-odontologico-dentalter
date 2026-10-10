@@ -18,6 +18,7 @@ import {
   X,
   FolderHeart,
   ScanLine,
+  MonitorUp,
 } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
@@ -54,6 +55,11 @@ export default function Sidebar({
       icon: <CalendarDays size={20} />,
       title: "Citas",
       href: "/admin/citas",
+    },
+    {
+      icon: <MonitorUp size={20} />,
+      title: "Sala de espera",
+      href: "/sala-espera",
     },
     {
       icon: <Users size={20} />,

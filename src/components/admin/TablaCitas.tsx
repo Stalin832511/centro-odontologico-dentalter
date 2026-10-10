@@ -16,6 +16,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { capitalizarNombre } from "@/lib/texto";
 
 // ============================================================
 // Tipos
@@ -132,9 +133,13 @@ export default function TablaCitas() {
         id_paciente: c.id_paciente,
         id_doctor: c.id_doctor,
         id_servicio: c.id_servicio,
-        paciente_nombre: c.pacientes ? `${c.pacientes.nombres} ${c.pacientes.apellidos}` : "—",
+        paciente_nombre: c.pacientes
+          ? `${capitalizarNombre(c.pacientes.nombres)} ${capitalizarNombre(c.pacientes.apellidos)}`
+          : "—",
         paciente_telefono: c.pacientes?.telefono ?? null,
-        doctor_nombre: c.doctores ? `${c.doctores.nombres} ${c.doctores.apellidos}` : "—",
+        doctor_nombre: c.doctores
+          ? `${capitalizarNombre(c.doctores.nombres)} ${capitalizarNombre(c.doctores.apellidos)}`
+          : "—",
         servicio_nombre: c.servicios?.nombre ?? "—",
       }))
     );
@@ -198,6 +203,22 @@ export default function TablaCitas() {
     setTimeout(() => setMensajeExito(null), 3000);
   }
 
+  // ------------------------------------------------------------
+  // Imprimir: abre la hoja membretada en una pestaña nueva,
+  // respetando los filtros que el usuario tiene activos en este
+  // momento en la tabla (antes esto solo hacía window.print()
+  // sobre la pantalla completa del admin, sidebar incluido).
+  // ------------------------------------------------------------
+  function handleImprimir() {
+    const qs = new URLSearchParams();
+    if (busqueda.trim()) qs.set("q", busqueda.trim());
+    if (filtroEstado) qs.set("estado", filtroEstado);
+    if (filtroDoctor) qs.set("doctor", filtroDoctor);
+    if (filtroDesde) qs.set("desde", filtroDesde);
+    if (filtroHasta) qs.set("hasta", filtroHasta);
+    window.open(`/imprimir-citas?${qs.toString()}`, "_blank");
+  }
+
   return (
     <div className="bg-white rounded-[32px] shadow-xl p-6">
       {/* HEADER */}
@@ -209,7 +230,7 @@ export default function TablaCitas() {
 
         <div className="flex flex-wrap gap-3">
           <button
-            onClick={() => window.print()}
+            onClick={handleImprimir}
             className="px-5 py-3 rounded-2xl bg-slate-100 flex items-center gap-2 hover:bg-slate-200 transition-colors"
           >
             <Printer size={18} />
@@ -293,7 +314,9 @@ export default function TablaCitas() {
               >
                 <option value="">Todos</option>
                 {doctores.map((d) => (
-                  <option key={d.id} value={d.id}>{d.nombres} {d.apellidos}</option>
+                  <option key={d.id} value={d.id}>
+                    {capitalizarNombre(d.nombres)} {capitalizarNombre(d.apellidos)}
+                  </option>
                 ))}
               </select>
             </div>
@@ -575,7 +598,7 @@ function EditarCitaModal({
             >
               {doctores.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.nombres} {d.apellidos}
+                  {capitalizarNombre(d.nombres)} {capitalizarNombre(d.apellidos)}
                 </option>
               ))}
             </select>
@@ -754,7 +777,7 @@ function NuevaCitaModal({
               <div className="flex items-center justify-between rounded-xl border border-cyan-200 bg-cyan-50 px-3.5 py-2.5">
                 <span className="text-sm font-semibold text-slate-700 flex items-center gap-2">
                   <User size={14} className="text-cyan-600" />
-                  {pacienteSeleccionado.nombres} {pacienteSeleccionado.apellidos}
+                  {capitalizarNombre(pacienteSeleccionado.nombres)} {capitalizarNombre(pacienteSeleccionado.apellidos)}
                 </span>
                 <button
                   type="button"
@@ -790,7 +813,9 @@ function NuevaCitaModal({
                           }}
                           className="w-full text-left px-3.5 py-2.5 text-sm hover:bg-slate-50 border-b border-slate-50 last:border-0"
                         >
-                          <span className="font-semibold text-slate-700">{p.nombres} {p.apellidos}</span>
+                          <span className="font-semibold text-slate-700">
+                            {capitalizarNombre(p.nombres)} {capitalizarNombre(p.apellidos)}
+                          </span>
                           <span className="text-slate-400 text-xs ml-2">{p.cedula}</span>
                         </button>
                       ))
@@ -824,7 +849,9 @@ function NuevaCitaModal({
               className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-cyan-400/40 focus:border-cyan-400"
             >
               {doctores.map((d) => (
-                <option key={d.id} value={d.id}>{d.nombres} {d.apellidos}</option>
+                <option key={d.id} value={d.id}>
+                  {capitalizarNombre(d.nombres)} {capitalizarNombre(d.apellidos)}
+                </option>
               ))}
             </select>
           </div>

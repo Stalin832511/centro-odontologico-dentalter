@@ -140,3 +140,18 @@ a {
 
   --font-mono: var(--font-geist-mono);
 }
+
+@keyframes turno-pulse {
+  0%, 100% {
+    transform: scale(1);
+    text-shadow: 0 0 0 rgba(131, 229, 214, 0);
+  }
+  50% {
+    transform: scale(1.025);
+    text-shadow: 0 0 28px rgba(131, 229, 214, 0.24);
+  }
+}
+
+.turno-pulse {
+  animation: turno-pulse 2.8s ease-in-out infinite;
+}
